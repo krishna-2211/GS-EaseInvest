@@ -1,36 +1,35 @@
 import { useApp } from '../context/AppContext'
 
 export default function UserSwitcher() {
-  const { currentUserId, users, switchUser } = useApp()
+  const { users, currentUser, setCurrentUser } = useApp()
 
   return (
     <div className="flex gap-2">
       {users.map((u) => {
-        const active = u.id === currentUserId
+        const active = u.user_id === currentUser?.user_id
         return (
           <button
-            key={u.id}
-            onClick={() => switchUser(u.id)}
-            className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors ${
+            key={u.user_id}
+            onClick={() => setCurrentUser(u)}
+            className="flex items-center gap-2 rounded-xl px-3 py-2 transition-colors text-left"
+            style={
               active
-                ? 'bg-gs-navy text-white'
-                : 'bg-gs-pale/40 text-gs-navy border border-gs-pale hover:bg-gs-pale/70'
-            }`}
+                ? { backgroundColor: '#001E62', color: '#fff' }
+                : { backgroundColor: '#f4f8fd', color: '#001E62' }
+            }
           >
-            <span
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                active ? 'bg-white/20 text-white' : 'bg-gs-navy text-white'
-              }`}
-            >
-              {u.initials}
-            </span>
             <div className="leading-tight">
-              <p className={`text-xs font-semibold ${active ? 'text-white' : 'text-gs-navy'}`}>
-                {u.name}
-              </p>
-              <p className={`text-[10px] ${active ? 'text-white/70' : 'text-gs-gray'}`}>
-                {u.style} · {u.goal}
-              </p>
+              <p className="text-xs font-semibold">{u.name}</p>
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                style={
+                  active
+                    ? { backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff' }
+                    : { backgroundColor: '#acd4f1', color: '#001E62' }
+                }
+              >
+                {u.style}
+              </span>
             </div>
           </button>
         )
