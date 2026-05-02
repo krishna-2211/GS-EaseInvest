@@ -11,6 +11,18 @@ const AppContext = createContext(null)
 export function AppProvider({ children }) {
   const [users, setUsers] = useState(FALLBACK_USERS)
   const [currentUser, setCurrentUser] = useState(FALLBACK_USERS[0])
+  const [onboardingData, setOnboardingData] = useState(null)
+  const [onboardedUserActive, setOnboardedUserActive] = useState(false)
+
+  const completeOnboarding = (data) => {
+    setOnboardingData(data)
+    setOnboardedUserActive(true)
+  }
+  const switchToOnboardedUser = () => setOnboardedUserActive(true)
+  const switchToUser = (user) => {
+    setCurrentUser(user)
+    setOnboardedUserActive(false)
+  }
 
   useEffect(() => {
     getUsers()
@@ -25,7 +37,7 @@ export function AppProvider({ children }) {
   }, [])
 
   return (
-    <AppContext.Provider value={{ users, currentUser, setCurrentUser }}>
+    <AppContext.Provider value={{ users, currentUser, onboardingData, onboardedUserActive, completeOnboarding, switchToUser, switchToOnboardedUser }}>
       {children}
     </AppContext.Provider>
   )

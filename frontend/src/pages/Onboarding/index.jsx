@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useApp } from '../../context/AppContext'
 import { Input } from '../../components/ui/input'
 
 const STEPS = ['Sign up', 'Your profile', 'Your habits', 'How it works']
@@ -332,6 +333,7 @@ function StepHowItWorks({ onBack, onFinish }) {
 
 export default function Onboarding() {
   const navigate = useNavigate()
+  const { completeOnboarding } = useApp()
   const [step, setStep] = useState(0)
   const [formData, setFormData] = useState({
     name: '', email: '', password: '',
@@ -343,6 +345,21 @@ export default function Onboarding() {
   const next   = () => setStep((s) => s + 1)
   const back   = () => setStep((s) => s - 1)
 
+  const handleFinish = () => {
+    completeOnboarding({
+      name:          formData.name,
+      occupation:    formData.occupation,
+      age:           formData.age,
+      income:        formData.income,
+      investAmount:  formData.monthlyInvest,
+      style:         formData.style,
+      goal:          formData.goal,
+      years:         formData.years,
+      panicBehavior: '',
+    })
+    navigate('/dashboard')
+  }
+
   return (
     <div className="bg-gs-bg min-h-screen py-8 px-4">
       <div className="max-w-md mx-auto">
@@ -351,7 +368,7 @@ export default function Onboarding() {
           {step === 0 && <StepSignUp    data={formData} update={update} onNext={next} />}
           {step === 1 && <StepProfile   data={formData} update={update} onNext={next} onBack={back} />}
           {step === 2 && <StepHabits    data={formData} update={update} onNext={next} onBack={back} />}
-          {step === 3 && <StepHowItWorks onBack={back} onFinish={() => navigate('/dashboard')} />}
+          {step === 3 && <StepHowItWorks onBack={back} onFinish={handleFinish} />}
         </div>
       </div>
     </div>

@@ -156,6 +156,56 @@ function HoldingRow({ h }) {
   )
 }
 
+const ONBOARDED_SCORE = {
+  score: 0,
+  label: 'Just getting started',
+  color: 'blue',
+  reason: "You haven't invested anything yet — that's okay, everyone starts here.",
+  tips: [
+    'Even $50 a month can grow significantly over time.',
+    'Starting early is the single biggest advantage you can have.',
+  ],
+}
+
+function OnboardedEmptyCard({ investAmount }) {
+  return (
+    <div
+      className="rounded-2xl p-8 flex flex-col items-center text-center"
+      style={{ backgroundColor: '#f4f8fd', border: '1px solid #acd4f1' }}
+    >
+      <p className="text-lg font-semibold" style={{ color: '#001E62' }}>
+        You haven't invested anything yet
+      </p>
+      <p className="text-sm text-gs-gray mt-2 max-w-xs leading-relaxed">
+        Start with as little as ${investAmount} a month — we'll guide you every step of the way
+      </p>
+      <Link
+        to="/invest"
+        className="mt-5 text-sm font-semibold text-white px-6 py-2.5 rounded-xl transition-colors"
+        style={{ backgroundColor: '#001E62' }}
+      >
+        Start Investing
+      </Link>
+    </div>
+  )
+}
+
+function EmptyPortfolioCard() {
+  return (
+    <div
+      className="rounded-2xl p-8 flex flex-col items-center text-center"
+      style={{ backgroundColor: '#f4f8fd', border: '1px solid #acd4f1' }}
+    >
+      <p className="text-lg font-semibold" style={{ color: '#001E62' }}>
+        You haven't invested anything yet
+      </p>
+      <p className="text-sm text-gs-gray mt-2 max-w-xs leading-relaxed">
+        Start with as little as $100 a month — we'll guide you every step of the way.
+      </p>
+    </div>
+  )
+}
+
 function HoldingsList({ stocks, mutualFunds }) {
   const hasStocks = stocks?.length > 0
   const hasFunds = mutualFunds?.length > 0
@@ -182,13 +232,20 @@ function HoldingsList({ stocks, mutualFunds }) {
 }
 
 export default function Dashboard() {
-  const { currentUser } = useApp()
+  const { currentUser, onboardingData, onboardedUserActive } = useApp()
   const [portfolio, setPortfolio] = useState(null)
   const [healthScore, setHealthScore] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!onboardedUserActive)
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (onboardedUserActive) {
+      setPortfolio(null)
+      setHealthScore(null)
+      setLoading(false)
+      setError(null)
+      return
+    }
     if (!currentUser) return
     setLoading(true)
     setError(null)
@@ -202,7 +259,7 @@ export default function Dashboard() {
       })
       .catch(() => setError('Could not load data. Is the backend running?'))
       .finally(() => setLoading(false))
-  }, [currentUser])
+  }, [currentUser, onboardedUserActive])
 
   if (loading) return <Spinner />
 
@@ -222,15 +279,56 @@ export default function Dashboard() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
 
-      {portfolio?.market_alert && (
-        <DontPanicBanner message={portfolio.market_alert} />
+      {onboardedUserActive && onboardingData && (
+        <div
+          className="bg-white rounded-xl px-4 py-4"
+          style={{ border: '1px solid #acd4f1' }}
+        >
+          <p style={{ color: '#001E62', fontSize: '22px', fontWeight: 600, lineHeight: 1.2 }}>
+            Welcome, {onboardingData.name}
+          </p>
+          <p className="text-sm text-gs-gray mt-1">
+            Your goal: {onboardingData.goal} · {onboardingData.years} years away
+          </p>
+          <p className="text-sm text-gs-gray">
+            Monthly investment: ${onboardingData.investAmount}
+          </p>
+        </div>
       )}
 
-      {healthScore && (
-        <HealthScoreCard score={healthScore} name={currentUser?.name} />
-      )}
+      {onboardedUserActive ? (
+        <>
+          <HealthScoreCard score={ONBOARDED_SCORE} name={onboardingData?.name} />
+          <OnboardedEmptyCard investAmount={onboardingData?.investAmount} />
+        </>
+      ) : (
+        <>
+          {portfolio?.market_alert && (
+            <DontPanicBanner message={portfolio.market_alert} />
+          )}
 
-      {portfolio && <PortfolioValueRow portfolio={portfolio} />}
+          {healthScore && (
+            <HealthScoreCard score={healthScore} name={currentUser?.name} />
+          )}
+
+          {portfolio?.stocks?.length === 0 && portfolio?.mutual_funds?.length === 0 ? (
+            <EmptyPortfolioCard />
+          ) : (
+            <>
+              {portfolio && <PortfolioValueRow portfolio={portfolio} />}
+
+              {portfolio?.allocation && (
+                <AllocationBar allocation={portfolio.allocation} />
+              )}
+
+              <HoldingsList
+                stocks={portfolio?.stocks ?? []}
+                mutualFunds={portfolio?.mutual_funds ?? []}
+              />
+            </>
+          )}
+        </>
+      )}
 
       <div className="grid grid-cols-2 gap-3 pt-2">
         <Link
@@ -248,15 +346,6 @@ export default function Dashboard() {
           Invest
         </Link>
       </div>
-
-      {portfolio?.allocation && (
-        <AllocationBar allocation={portfolio.allocation} />
-      )}
-
-      <HoldingsList
-        stocks={portfolio?.stocks ?? []}
-        mutualFunds={portfolio?.mutual_funds ?? []}
-      />
 
     </main>
   )

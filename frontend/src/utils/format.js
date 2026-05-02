@@ -9,4 +9,5 @@ export const healthColor = {
   green:  { bg: '#e8f5ee', text: '#0f6e56', border: '#9fe1cb' },
   yellow: { bg: '#fef3c7', text: '#b45309', border: '#fac775' },
   red:    { bg: '#fdecea', text: '#a32d2d', border: '#f09595' },
+  blue:   { bg: '#e8f4fb', text: '#00355f', border: '#acd4f1' },
 }
