@@ -26,6 +26,11 @@ export function AppProvider({ children }) {
     setOnboardedUserActive(false)
     setCurrentUser(FALLBACK_USERS[0])
   }
+  const login = (userId) => {
+    const user = users.find(u => u.user_id === userId) ?? FALLBACK_USERS.find(u => u.user_id === userId)
+    if (user) switchToUser(user)
+    setIsAuthenticated(true)
+  }
   const switchToOnboardedUser = () => setOnboardedUserActive(true)
   const switchToUser = (user) => {
     setCurrentUser(user)
@@ -45,7 +50,7 @@ export function AppProvider({ children }) {
   }, [])
 
   return (
-    <AppContext.Provider value={{ users, currentUser, onboardingData, onboardedUserActive, isAuthenticated, completeOnboarding, logout, switchToUser, switchToOnboardedUser }}>
+    <AppContext.Provider value={{ users, currentUser, onboardingData, onboardedUserActive, isAuthenticated, completeOnboarding, login, logout, switchToUser, switchToOnboardedUser }}>
       {children}
     </AppContext.Provider>
   )

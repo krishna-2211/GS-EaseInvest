@@ -53,6 +53,8 @@ function TrendIcon({ color }) {
 }
 
 function BottomNav() {
+  const { isAuthenticated } = useApp()
+  if (!isAuthenticated) return null
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-20 bg-white flex"
