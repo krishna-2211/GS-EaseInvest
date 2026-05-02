@@ -13,7 +13,7 @@ USERS = {
         "portfolio": {
             "stocks": [
                 {"name": "Apple", "invested": 1500, "current": 1820},
-                {"name": "Tesla", "invested": 1000, "current": 1150},
+                {"name": "Tesla", "invested": 1000, "current": 870},
                 {"name": "NVIDIA", "invested": 800, "current": 1100},
             ],
             "mutual_funds": [
@@ -36,7 +36,7 @@ USERS = {
         "panic_behavior": "I panic and want to sell",
         "portfolio": {
             "stocks": [
-                {"name": "Microsoft", "invested": 600, "current": 650},
+                {"name": "Microsoft", "invested": 600, "current": 534},
                 {"name": "Johnson & Johnson", "invested": 400, "current": 420},
             ],
             "mutual_funds": [

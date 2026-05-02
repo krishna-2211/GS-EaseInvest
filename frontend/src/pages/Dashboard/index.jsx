@@ -7,6 +7,7 @@ import { formatCurrency, formatPct, salaryLabel, healthColor } from '../../utils
 import DontPanicBanner from '../../components/DontPanicBanner'
 import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
 function Spinner() {
   return (
@@ -89,30 +90,73 @@ function HealthScoreCard({ score, name }) {
   )
 }
 
-function PortfolioValueRow({ portfolio }) {
-  const positive = portfolio.total_return_pct >= 0
+function StatCard({ label, value, hero, valueColor, children }) {
   return (
-    <div className="bg-white rounded-2xl p-5 flex items-center justify-between" style={{ border: '1px solid #acd4f1' }}>
-      <div>
-        <p className="text-2xl font-bold text-gs-navy">
-          {formatCurrency(portfolio.current_value)}
-        </p>
-        {portfolio.salary_months_equivalent != null && (
-          <p className="text-xs text-gs-gray mt-0.5">
-            {salaryLabel(portfolio.salary_months_equivalent)}
-          </p>
-        )}
-      </div>
-      <Badge
-        className="text-xs font-semibold border-0"
-        style={
-          positive
-            ? { backgroundColor: '#e8f5ee', color: '#0f6e56' }
-            : { backgroundColor: '#fdecea', color: '#dc2626' }
-        }
+    <div
+      className="rounded-xl p-4 flex flex-col gap-1.5"
+      style={
+        hero
+          ? { backgroundColor: '#001E62' }
+          : { backgroundColor: '#ffffff', border: '1px solid #e8eff8' }
+      }
+    >
+      <p className="text-xs" style={{ color: hero ? 'rgba(255,255,255,0.6)' : '#666666' }}>
+        {label}
+      </p>
+      <p
+        className="text-lg font-bold tabular-nums leading-tight"
+        style={{ color: valueColor ?? (hero ? '#ffffff' : '#001E62') }}
       >
-        {positive ? '+' : ''}{formatPct(portfolio.total_return_pct)}
-      </Badge>
+        {value}
+      </p>
+      {children}
+    </div>
+  )
+}
+
+function PortfolioStatsGrid({ portfolio }) {
+  const totalReturn = (portfolio.current_value ?? 0) - (portfolio.total_invested ?? 0)
+  const returnPositive = totalReturn >= 0
+  const pctPositive = (portfolio.total_return_pct ?? 0) >= 0
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          label="Total invested"
+          value={formatCurrency(portfolio.total_invested)}
+        />
+        <StatCard
+          label="Current value"
+          value={formatCurrency(portfolio.current_value)}
+          hero
+        />
+        <StatCard
+          label="Total return"
+          value={`${returnPositive ? '+' : ''}${formatCurrency(totalReturn)}`}
+          valueColor={returnPositive ? '#16a34a' : '#dc2626'}
+        >
+          <Badge
+            className="text-[10px] font-semibold border-0 self-start px-2 py-0.5"
+            style={
+              pctPositive
+                ? { backgroundColor: '#e8f5ee', color: '#16a34a' }
+                : { backgroundColor: '#fdecea', color: '#dc2626' }
+            }
+          >
+            {pctPositive ? '+' : ''}{formatPct(portfolio.total_return_pct)}
+          </Badge>
+        </StatCard>
+        <StatCard
+          label="Invested this month"
+          value={formatCurrency(portfolio.last_30_days_invested)}
+        />
+      </div>
+      {portfolio.salary_months_equivalent != null && (
+        <p className="text-xs text-gs-gray text-center">
+          {salaryLabel(portfolio.salary_months_equivalent)}
+        </p>
+      )}
     </div>
   )
 }
@@ -142,15 +186,104 @@ function AllocationBar({ allocation }) {
 }
 
 function HoldingRow({ h }) {
-  const positive = h.return_pct >= 0
+  const gainLoss = (h.current ?? 0) - (h.invested ?? 0)
+  const positive = (h.return_pct ?? 0) >= 0
+  const gainColor = positive ? '#16a34a' : '#dc2626'
+
   return (
-    <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid #e8eff8' }}>
-      <p className="font-medium text-gs-navy text-sm">{h.name}</p>
+    <div className="flex items-start justify-between py-4" style={{ borderBottom: '1px solid #e8eff8' }}>
+      <div>
+        <p className="font-medium text-gs-navy text-sm">{h.name}</p>
+        <p className="text-xs text-gs-gray mt-0.5">
+          Invested: {formatCurrency(h.invested)}
+        </p>
+      </div>
       <div className="text-right">
         <p className="font-bold text-gs-navy text-sm tabular-nums">{formatCurrency(h.current)}</p>
-        <p className="text-xs tabular-nums" style={{ color: positive ? '#16a34a' : '#dc2626' }}>
+        <p className="text-xs tabular-nums" style={{ color: gainColor }}>
+          {positive ? '+' : ''}{formatCurrency(gainLoss)}
+        </p>
+        <p className="text-xs tabular-nums" style={{ color: gainColor }}>
           {positive ? '+' : ''}{formatPct(h.return_pct)}
         </p>
+      </div>
+    </div>
+  )
+}
+
+const STOCK_COLORS = ['#001E62', '#00355f', '#6B96C3', '#7399c6', '#acd4f1']
+const FUND_COLORS  = ['#1d4ed8', '#3b82f6']
+
+function AllocationPieChart({ stocks, mutualFunds }) {
+  if (!stocks?.length && !mutualFunds?.length) return null
+
+  const chartData = [
+    ...(stocks ?? []).map((s, i) => ({
+      name:  s.name,
+      value: s.current,
+      color: STOCK_COLORS[i % STOCK_COLORS.length],
+    })),
+    ...(mutualFunds ?? []).map((f, i) => ({
+      name:  f.name,
+      value: f.current,
+      color: FUND_COLORS[i % FUND_COLORS.length],
+    })),
+  ]
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null
+    const { name, value } = payload[0].payload
+    return (
+      <div
+        className="text-xs px-3 py-2 rounded-lg shadow-sm"
+        style={{ backgroundColor: '#fff', border: '1px solid #e8eff8', color: '#001E62' }}
+      >
+        {name}: {formatCurrency(value)}
+      </div>
+    )
+  }
+
+  const CenterLabel = () => (
+    <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
+      <tspan x="50%" dy="-0.3em" fontSize="11" fill="#666666">Your</tspan>
+      <tspan x="50%" dy="1.4em" fontSize="11" fill="#666666">mix</tspan>
+    </text>
+  )
+
+  return (
+    <div
+      className="bg-white rounded-2xl p-5 mt-4 flex flex-col items-center"
+      style={{ border: '1px solid #e8eff8' }}
+    >
+      <p className="text-[10px] font-semibold text-gs-gray uppercase tracking-widest self-start mb-4">
+        Your investment mix
+      </p>
+
+      <PieChart width={300} height={300}>
+        <Pie
+          data={chartData}
+          dataKey="value"
+          innerRadius={60}
+          outerRadius={100}
+          paddingAngle={2}
+          startAngle={90}
+          endAngle={-270}
+        >
+          {chartData.map((entry) => (
+            <Cell key={entry.name} fill={entry.color} stroke="none" />
+          ))}
+          <CenterLabel />
+        </Pie>
+        <Tooltip content={<CustomTooltip />} />
+      </PieChart>
+
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-1">
+        {chartData.map((entry) => (
+          <div key={entry.name} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+            <span style={{ fontSize: 12, color: '#666666' }}>{entry.name}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -230,7 +363,7 @@ export default function Dashboard() {
         <HealthScoreCard score={healthScore} name={currentUser?.name} />
       )}
 
-      {portfolio && <PortfolioValueRow portfolio={portfolio} />}
+      {portfolio && <PortfolioStatsGrid portfolio={portfolio} />}
 
       <div className="grid grid-cols-2 gap-3 pt-2">
         <Link
@@ -256,6 +389,11 @@ export default function Dashboard() {
       <HoldingsList
         stocks={portfolio?.stocks ?? []}
         mutualFunds={portfolio?.mutual_funds ?? []}
+      />
+
+      <AllocationPieChart
+        stocks={portfolio?.stocks}
+        mutualFunds={portfolio?.mutual_funds}
       />
 
     </main>
