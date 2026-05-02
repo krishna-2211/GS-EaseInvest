@@ -1,19 +1,31 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { getUsers } from '../api/users'
 
-export const MOCK_USERS = [
-  { id: 'user_001', name: 'Pralay', initials: 'PR', style: 'Careful', goal: 'Buy a house' },
-  { id: 'user_002', name: 'Krishna', initials: 'KR', style: 'YOLO',    goal: 'Early retirement' },
+const FALLBACK_USERS = [
+  { user_id: 'user_001', name: 'Pralay', style: 'YOLO',    goal: 'Early retirement' },
+  { user_id: 'user_002', name: 'Krishna', style: 'Careful', goal: 'Buy a car' },
 ]
 
 const AppContext = createContext(null)
 
 export function AppProvider({ children }) {
-  const [currentUserId, setCurrentUserId] = useState(MOCK_USERS[0].id)
+  const [users, setUsers] = useState(FALLBACK_USERS)
+  const [currentUser, setCurrentUser] = useState(FALLBACK_USERS[0])
 
-  const switchUser = (userId) => setCurrentUserId(userId)
+  useEffect(() => {
+    getUsers()
+      .then((res) => {
+        const fetched = res.data
+        if (Array.isArray(fetched) && fetched.length) {
+          setUsers(fetched)
+          setCurrentUser(fetched[0])
+        }
+      })
+      .catch(() => {/* keep fallback */})
+  }, [])
 
   return (
-    <AppContext.Provider value={{ currentUserId, users: MOCK_USERS, switchUser }}>
+    <AppContext.Provider value={{ users, currentUser, setCurrentUser }}>
       {children}
     </AppContext.Provider>
   )

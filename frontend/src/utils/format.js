@@ -1,11 +1,12 @@
-export const formatCurrency = (value) =>
-  `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+export const formatCurrency = (n) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
-export const formatPct = (value) =>
-  `${Number(value).toFixed(1)}%`
+export const formatPct = (n) => `${n}%`
 
-export const healthColor = (score) => {
-  if (score >= 80) return 'green'
-  if (score >= 60) return 'yellow'
-  return 'red'
+export const salaryLabel = (n) => `That's about ${n} months of your salary`
+
+export const healthColor = {
+  green:  { bg: '#e8f5ee', text: '#0f6e56', border: '#9fe1cb' },
+  yellow: { bg: '#fef3c7', text: '#b45309', border: '#fac775' },
+  red:    { bg: '#fdecea', text: '#a32d2d', border: '#f09595' },
 }

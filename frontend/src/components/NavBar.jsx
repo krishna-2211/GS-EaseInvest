@@ -3,9 +3,12 @@ import UserSwitcher from './UserSwitcher'
 
 export default function NavBar() {
   return (
-    <nav className="bg-gs-navy px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-      <Link to="/dashboard" className="text-white font-bold text-lg tracking-tight">
-        EaseInvest
+    <nav
+      className="bg-white px-6 py-3 flex items-center justify-between sticky top-0 z-10"
+      style={{ borderBottom: '1px solid #acd4f1' }}
+    >
+      <Link to="/dashboard" className="font-bold text-gs-navy text-lg tracking-tight">
+        GS-EaseInvest
       </Link>
       <UserSwitcher />
     </nav>
