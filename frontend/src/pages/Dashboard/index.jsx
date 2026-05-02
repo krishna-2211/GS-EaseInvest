@@ -5,6 +5,7 @@ import { getPortfolio } from '../../api/portfolio'
 import { getHealthScore } from '../../api/healthScore'
 import { formatCurrency, formatPct, salaryLabel, healthColor } from '../../utils/format'
 import DontPanicBanner from '../../components/DontPanicBanner'
+import GrowthCalculator from '../../components/GrowthCalculator'
 import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
@@ -561,6 +562,13 @@ export default function Dashboard() {
         stocks={portfolio?.stocks}
         mutualFunds={portfolio?.mutual_funds}
       />
+
+      <div>
+        <p className="text-[10px] font-semibold text-gs-gray uppercase tracking-widest mb-3">
+          See your money grow
+        </p>
+        <GrowthCalculator />
+      </div>
 
     </main>
   )
