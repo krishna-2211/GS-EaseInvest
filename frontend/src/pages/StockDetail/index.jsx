@@ -3,6 +3,18 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { formatCurrency, formatPct } from '../../utils/format'
 
+const LOGO_MAP = {
+  'Apple':                          'apple.com',
+  'Tesla':                          'tesla.com',
+  'NVIDIA':                         'nvidia.com',
+  'Microsoft':                      'microsoft.com',
+  'Johnson & Johnson':              'jnj.com',
+  'Vanguard S&P 500 ETF':           'vanguard.com',
+  'Fidelity Growth Fund':           'fidelity.com',
+  'Vanguard Total Bond Market ETF': 'vanguard.com',
+  'Fidelity Balanced Fund':         'fidelity.com',
+}
+
 const PERIODS = ['1W', '1M', '3M', '1Y', '3Y']
 const PERIOD_POINTS = { '1W': 7, '1M': 30, '3M': 90, '1Y': 52, '3Y': 36 }
 const PERIOD_START_LABEL = {
@@ -192,9 +204,19 @@ export default function StockDetail() {
           </svg>
           <span className="text-sm font-medium">Back</span>
         </button>
-        <p className="font-semibold" style={{ color: '#001E62', fontSize: 22 }}>
-          {holding.name}
-        </p>
+        <div className="flex items-center gap-3">
+          {LOGO_MAP[holding.name] && (
+            <img
+              src={`https://www.google.com/s2/favicons?domain=${LOGO_MAP[holding.name]}&sz=64`}
+              alt={holding.name}
+              style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain', flexShrink: 0, background: '#f4f8fd', padding: 4 }}
+              onError={(e) => { e.target.style.display = 'none' }}
+            />
+          )}
+          <p className="font-semibold" style={{ color: '#001E62', fontSize: 22 }}>
+            {holding.name}
+          </p>
+        </div>
         <p className="text-3xl font-bold mt-1 tabular-nums" style={{ color: '#001E62' }}>
           {formatCurrency(holding.current)}
         </p>

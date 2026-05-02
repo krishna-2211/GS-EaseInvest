@@ -10,6 +10,18 @@ import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
+const LOGO_MAP = {
+  'Apple':                          'apple.com',
+  'Tesla':                          'tesla.com',
+  'NVIDIA':                         'nvidia.com',
+  'Microsoft':                      'microsoft.com',
+  'Johnson & Johnson':              'jnj.com',
+  'Vanguard S&P 500 ETF':           'vanguard.com',
+  'Fidelity Growth Fund':           'fidelity.com',
+  'Vanguard Total Bond Market ETF': 'vanguard.com',
+  'Fidelity Balanced Fund':         'fidelity.com',
+}
+
 const ONBOARDED_SCORE = {
   score: null,
   label: 'Ready to start',
@@ -214,11 +226,21 @@ function HoldingRow({ h, navigate, portfolioCurrentValue }) {
       style={{ borderBottom: '1px solid #e8eff8' }}
       onClick={() => navigate('/stock-detail', { state: { holding: h, portfolioCurrentValue } })}
     >
-      <div>
-        <p className="font-medium text-gs-navy text-sm">{h.name}</p>
-        <p className="text-xs text-gs-gray mt-0.5">
-          Invested: {formatCurrency(h.invested)}
-        </p>
+      <div className="flex items-center">
+        {LOGO_MAP[h.name] && (
+          <img
+            src={`https://www.google.com/s2/favicons?domain=${LOGO_MAP[h.name]}&sz=64`}
+            alt={h.name}
+            style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain', marginRight: 10, flexShrink: 0, background: '#f4f8fd', padding: 4 }}
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
+        )}
+        <div>
+          <p className="font-medium text-gs-navy text-sm">{h.name}</p>
+          <p className="text-xs text-gs-gray mt-0.5">
+            Invested: {formatCurrency(h.invested)}
+          </p>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <div className="text-right">
