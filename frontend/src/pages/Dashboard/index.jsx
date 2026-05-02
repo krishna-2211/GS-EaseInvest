@@ -117,57 +117,66 @@ function PortfolioValueRow({ portfolio }) {
   )
 }
 
-function AllocationBar({ stocksPct, mutualFundsPct }) {
+function AllocationBar({ allocation }) {
+  if (!allocation) return null
+  const { stocks_pct, mutual_funds_pct } = allocation
   return (
-    <div className="bg-white rounded-2xl p-5 flex flex-col gap-3" style={{ border: '1px solid #acd4f1' }}>
-      <p className="text-sm font-semibold text-gs-navy">How your money is split</p>
-      <div className="w-full h-3 rounded-full overflow-hidden flex">
-        <div style={{ width: `${stocksPct}%`, backgroundColor: '#001E62' }} className="h-full" />
-        <div style={{ width: `${mutualFundsPct}%`, backgroundColor: '#acd4f1' }} className="h-full" />
+    <div>
+      <p className="text-xs text-gs-gray uppercase tracking-widest mb-3">How your money is split</p>
+      <div className="w-full flex gap-1" style={{ height: 12 }}>
+        <div style={{ width: `${stocks_pct}%`, backgroundColor: '#001E62', borderRadius: 9999 }} />
+        <div style={{ width: `${mutual_funds_pct}%`, backgroundColor: '#acd4f1', borderRadius: 9999 }} />
       </div>
-      <div className="flex gap-4">
+      <div className="flex gap-5 mt-3">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#001E62' }} />
-          <span className="text-xs text-gs-gray">Stocks {stocksPct}%</span>
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#001E62' }} />
+          <span className="text-xs text-gs-gray">Stocks {formatPct(stocks_pct)}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#acd4f1' }} />
-          <span className="text-xs text-gs-gray">Mutual Funds {mutualFundsPct}%</span>
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#acd4f1' }} />
+          <span className="text-xs text-gs-gray">Mutual Funds {formatPct(mutual_funds_pct)}</span>
         </div>
       </div>
     </div>
   )
 }
 
-function HoldingRow({ holding }) {
-  const positive = holding.return_pct >= 0
+function HoldingRow({ h }) {
+  const positive = h.return_pct >= 0
   return (
-    <div className="flex items-center justify-between py-3 text-sm">
-      <p className="font-medium text-gs-navy">{holding.name}</p>
-      <div className="flex items-center gap-4">
-        <p className="text-gs-navy tabular-nums">{formatCurrency(holding.current)}</p>
-        <p
-          className="text-xs font-semibold w-14 text-right tabular-nums"
-          style={{ color: positive ? '#0f6e56' : '#dc2626' }}
-        >
-          {positive ? '+' : ''}{formatPct(holding.return_pct)}
+    <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid #e8eff8' }}>
+      <p className="font-medium text-gs-navy text-sm">{h.name}</p>
+      <div className="text-right">
+        <p className="font-bold text-gs-navy text-sm tabular-nums">{formatCurrency(h.current)}</p>
+        <p className="text-xs tabular-nums" style={{ color: positive ? '#16a34a' : '#dc2626' }}>
+          {positive ? '+' : ''}{formatPct(h.return_pct)}
         </p>
       </div>
     </div>
   )
 }
 
-function HoldingsSection({ title, holdings }) {
-  if (!holdings.length) return null
+function HoldingsList({ stocks, mutualFunds }) {
+  const hasStocks = stocks?.length > 0
+  const hasFunds = mutualFunds?.length > 0
+  if (!hasStocks && !hasFunds) return null
   return (
-    <div className="bg-white rounded-2xl p-5 flex flex-col" style={{ border: '1px solid #acd4f1' }}>
-      <p className="text-sm font-semibold text-gs-navy mb-1">{title}</p>
-      {holdings.map((h, i) => (
-        <div key={h.name ?? i}>
-          <HoldingRow holding={h} />
-          {i < holdings.length - 1 && <div style={{ height: 1, backgroundColor: '#acd4f1' }} />}
+    <div className="bg-white rounded-2xl p-5 mt-4" style={{ border: '1px solid #e8eff8' }}>
+      {hasStocks && (
+        <div>
+          <p className="text-[10px] font-semibold text-gs-gray uppercase tracking-widest mb-1">Stocks</p>
+          {stocks.map((h, i) => <HoldingRow key={i} h={h} />)}
         </div>
-      ))}
+      )}
+      {hasStocks && hasFunds && (
+        <div className="my-4" style={{ height: 1, backgroundColor: '#e8eff8' }} />
+      )}
+      {hasFunds && (
+        <div>
+          <p className="text-[10px] font-semibold text-gs-gray uppercase tracking-widest mb-1">Mutual Funds</p>
+          {mutualFunds.map((h, i) => <HoldingRow key={i} h={h} />)}
+        </div>
+      )}
     </div>
   )
 }
@@ -210,9 +219,6 @@ export default function Dashboard() {
     )
   }
 
-  const stocks = portfolio?.holdings?.filter((h) => h.type === 'stock') ?? []
-  const mutualFunds = portfolio?.holdings?.filter((h) => h.type === 'mutual_fund') ?? []
-
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
 
@@ -224,21 +230,7 @@ export default function Dashboard() {
         <HealthScoreCard score={healthScore} name={currentUser?.name} />
       )}
 
-      {portfolio && (
-        <>
-          <PortfolioValueRow portfolio={portfolio} />
-
-          {(portfolio.stocks_pct != null && portfolio.mutual_funds_pct != null) && (
-            <AllocationBar
-              stocksPct={portfolio.stocks_pct}
-              mutualFundsPct={portfolio.mutual_funds_pct}
-            />
-          )}
-
-          <HoldingsSection title="Stocks" holdings={stocks} />
-          <HoldingsSection title="Mutual Funds" holdings={mutualFunds} />
-        </>
-      )}
+      {portfolio && <PortfolioValueRow portfolio={portfolio} />}
 
       <div className="grid grid-cols-2 gap-3 pt-2">
         <Link
@@ -256,6 +248,16 @@ export default function Dashboard() {
           Invest
         </Link>
       </div>
+
+      {portfolio?.allocation && (
+        <AllocationBar allocation={portfolio.allocation} />
+      )}
+
+      <HoldingsList
+        stocks={portfolio?.stocks ?? []}
+        mutualFunds={portfolio?.mutual_funds ?? []}
+      />
+
     </main>
   )
 }
