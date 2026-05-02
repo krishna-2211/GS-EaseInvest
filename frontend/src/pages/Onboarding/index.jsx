@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useApp } from '../../context/AppContext'
 import { Input } from '../../components/ui/input'
 
 const STEPS = ['Sign up', 'Your profile', 'Your habits', 'How it works']
@@ -19,6 +20,107 @@ const FEATURES = [
   { icon: '🔔', title: "Don't Panic Mode", desc: 'We alert you calmly when markets dip — no scary numbers' },
   { icon: '👤', title: 'Two profiles',    desc: 'Switch between Pralay and Krishna to see how advice changes' },
 ]
+
+// ─── Landing screen ──────────────────────────────────────────────────────────
+
+function LandingScreen({ onNew, onExisting }) {
+  return (
+    <div>
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold text-gs-navy">Welcome to GS-EaseInvest</h1>
+        <p className="text-sm text-gs-gray mt-2">Your calm, friendly guide to growing your money</p>
+      </div>
+      <div className="flex gap-4">
+        <button
+          onClick={onNew}
+          className="flex-1 bg-white rounded-xl p-5 text-left transition-all hover:border-gs-blue"
+          style={{ border: '1px solid #acd4f1' }}
+        >
+          <p className="font-semibold text-gs-navy text-sm">I'm new here</p>
+          <p className="text-xs text-gs-gray mt-1.5 leading-relaxed">Set up my profile and get started</p>
+        </button>
+        <button
+          onClick={onExisting}
+          className="flex-1 bg-white rounded-xl p-5 text-left transition-all hover:border-gs-blue"
+          style={{ border: '1px solid #acd4f1' }}
+        >
+          <p className="font-semibold text-gs-navy text-sm">I already have an account</p>
+          <p className="text-xs text-gs-gray mt-1.5 leading-relaxed">Sign in and see my investments</p>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Login screen ─────────────────────────────────────────────────────────────
+
+const LOGIN_USERS = [
+  { user_id: 'user_001', name: 'Pralay' },
+  { user_id: 'user_002', name: 'Krishna' },
+]
+
+function LoginScreen({ onBack, onSignIn }) {
+  const [selectedUserId, setSelectedUserId] = useState('user_001')
+  const [password, setPassword] = useState('')
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid #acd4f1' }}>
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-sm text-gs-gray hover:text-gs-navy transition-colors mb-4"
+      >
+        ← Back
+      </button>
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gs-navy">Welcome back</h1>
+        <p className="text-sm text-gs-gray mt-1">Sign in and see your investments</p>
+      </div>
+      <div className="flex flex-col gap-4">
+        <div>
+          <label className="text-xs font-semibold text-gs-navy block mb-2">Who are you?</label>
+          <div className="flex gap-3">
+            {LOGIN_USERS.map((u) => {
+              const selected = selectedUserId === u.user_id
+              return (
+                <button
+                  key={u.user_id}
+                  onClick={() => setSelectedUserId(u.user_id)}
+                  className="flex-1 py-3 rounded-xl text-sm font-medium transition-all"
+                  style={{
+                    background: selected ? '#001E62' : '#f4f8fd',
+                    border:     `1px solid ${selected ? '#001E62' : '#acd4f1'}`,
+                    color:      selected ? '#fff'    : '#001E62',
+                  }}
+                >
+                  {u.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-gs-navy">Password</label>
+          <input
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && onSignIn(selectedUserId)}
+            className="flex h-10 w-full rounded-md border px-3 py-2 text-sm
+                       placeholder:text-gs-gray focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gs-blue"
+            style={{ borderColor: '#acd4f1' }}
+          />
+        </div>
+        <button
+          onClick={() => onSignIn(selectedUserId)}
+          className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gs-navy hover:bg-gs-deep transition-colors mt-2"
+        >
+          Sign in →
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
@@ -332,7 +434,9 @@ function StepHowItWorks({ onBack, onFinish }) {
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const [step, setStep] = useState(0)
+  const { completeOnboarding, login } = useApp()
+  const [view, setView]   = useState('landing')  // 'landing' | 'signup' | 'login'
+  const [step, setStep]   = useState(0)
   const [formData, setFormData] = useState({
     name: '', email: '', password: '',
     occupation: '', age: '', income: '', monthlyInvest: '',
@@ -343,16 +447,52 @@ export default function Onboarding() {
   const next   = () => setStep((s) => s + 1)
   const back   = () => setStep((s) => s - 1)
 
+  const handleFinish = () => {
+    completeOnboarding({
+      name:          formData.name,
+      occupation:    formData.occupation,
+      age:           formData.age,
+      income:        formData.income,
+      investAmount:  formData.monthlyInvest,
+      style:         formData.style,
+      goal:          formData.goal,
+      years:         formData.years,
+      panicBehavior: '',
+    })
+    navigate('/dashboard')
+  }
+
+  const handleSignIn = (userId) => {
+    login(userId)
+    navigate('/dashboard')
+  }
+
   return (
     <div className="bg-gs-bg min-h-screen py-8 px-4">
       <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gs-pale/60">
-          <StepIndicator current={step} />
-          {step === 0 && <StepSignUp    data={formData} update={update} onNext={next} />}
-          {step === 1 && <StepProfile   data={formData} update={update} onNext={next} onBack={back} />}
-          {step === 2 && <StepHabits    data={formData} update={update} onNext={next} onBack={back} />}
-          {step === 3 && <StepHowItWorks onBack={back} onFinish={() => navigate('/dashboard')} />}
-        </div>
+        {view === 'landing' && (
+          <LandingScreen
+            onNew={() => setView('signup')}
+            onExisting={() => setView('login')}
+          />
+        )}
+
+        {view === 'login' && (
+          <LoginScreen
+            onBack={() => setView('landing')}
+            onSignIn={handleSignIn}
+          />
+        )}
+
+        {view === 'signup' && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gs-pale/60">
+            <StepIndicator current={step} />
+            {step === 0 && <StepSignUp    data={formData} update={update} onNext={next} />}
+            {step === 1 && <StepProfile   data={formData} update={update} onNext={next} onBack={back} />}
+            {step === 2 && <StepHabits    data={formData} update={update} onNext={next} onBack={back} />}
+            {step === 3 && <StepHowItWorks onBack={back} onFinish={handleFinish} />}
+          </div>
+        )}
       </div>
     </div>
   )

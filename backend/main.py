@@ -30,6 +30,27 @@ def calculate_portfolio(user: dict) -> dict:
     mutual_funds = user["portfolio"]["mutual_funds"]
     all_holdings = stocks + mutual_funds
 
+    if not all_holdings:
+        return {
+            "user_id": user["user_id"],
+            "name": user["name"],
+            "total_invested": 0,
+            "current_value": 0,
+            "total_return_pct": 0,
+            "salary_months_equivalent": 0,
+            "allocation": {"stocks_pct": 0, "mutual_funds_pct": 0},
+            "stocks": [],
+            "mutual_funds": [],
+            "last_30_days_invested": user["monthly_investment"],
+            "market_alert": user["market_alert"],
+            "health_score": {
+                "score": 0,
+                "label": "Just getting started",
+                "color": "blue",
+                "reason": "You haven't invested anything yet — that's okay, everyone starts here.",
+            },
+        }
+
     total_invested = sum(h["invested"] for h in all_holdings)
     current_value = sum(h["current"] for h in all_holdings)
 
@@ -159,10 +180,22 @@ def get_health_score(user_id: str):
     portfolio = calculate_portfolio(user)
     hs = portfolio["health_score"]
 
+    num_holdings = len(portfolio["stocks"]) + len(portfolio["mutual_funds"])
+    if num_holdings == 0:
+        return {
+            "score": 0,
+            "label": "Just getting started",
+            "color": "blue",
+            "reason": "You haven't invested anything yet — that's okay, everyone starts here.",
+            "tips": [
+                "Even $50 a month can grow significantly over time.",
+                "Starting early is the single biggest advantage you can have.",
+            ],
+        }
+
     stocks_pct = portfolio["allocation"]["stocks_pct"]
     mf_pct = portfolio["allocation"]["mutual_funds_pct"]
     total_return_pct = portfolio["total_return_pct"]
-    num_holdings = len(portfolio["stocks"]) + len(portfolio["mutual_funds"])
 
     tips_pool = []
 

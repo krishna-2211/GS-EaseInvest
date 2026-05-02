@@ -46,4 +46,21 @@ USERS = {
         },
         "market_alert": None,
     },
+    "user_003": {
+        "user_id": "user_003",
+        "name": "Alex",
+        "age": 21,
+        "occupation": "College Student",
+        "monthly_income": 800,
+        "monthly_investment": 100,
+        "risk_style": "Careful",
+        "goal": "Build an emergency fund",
+        "goal_years": 2,
+        "panic_behavior": "I panic and want to sell everything",
+        "portfolio": {
+            "stocks": [],
+            "mutual_funds": [],
+        },
+        "market_alert": None,
+    },
 }
