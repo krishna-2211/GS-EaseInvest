@@ -1,9 +1,18 @@
 # Run with: uvicorn main:app --reload
 
+import json
+import os
+
+import anthropic
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from mock_data import USERS
+from prompts import SYSTEM_PROMPT, build_user_context
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -16,25 +25,7 @@ app.add_middleware(
 )
 
 
-@app.get("/users")
-def list_users():
-    return [
-        {
-            "user_id": u["user_id"],
-            "name": u["name"],
-            "style": u["risk_style"],
-            "goal": u["goal"],
-        }
-        for u in USERS.values()
-    ]
-
-
-@app.get("/portfolio/{user_id}")
-def get_portfolio(user_id: str):
-    user = USERS.get(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
-
+def calculate_portfolio(user: dict) -> dict:
     stocks = user["portfolio"]["stocks"]
     mutual_funds = user["portfolio"]["mutual_funds"]
     all_holdings = stocks + mutual_funds
@@ -119,3 +110,59 @@ def get_portfolio(user_id: str):
             "reason": health_reason,
         },
     }
+
+
+@app.get("/users")
+def list_users():
+    return [
+        {
+            "user_id": u["user_id"],
+            "name": u["name"],
+            "style": u["risk_style"],
+            "goal": u["goal"],
+        }
+        for u in USERS.values()
+    ]
+
+
+@app.get("/portfolio/{user_id}")
+def get_portfolio(user_id: str):
+    user = USERS.get(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
+    return calculate_portfolio(user)
+
+
+class RebalanceRequest(BaseModel):
+    user_id: str
+    question: str
+
+
+@app.post("/rebalance")
+def rebalance(request: RebalanceRequest):
+    user = USERS.get(request.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
+
+    try:
+        portfolio = calculate_portfolio(user)
+        context = build_user_context(user, portfolio, request.question)
+
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": context}],
+        )
+
+        raw = response.content[0].text.strip()
+        result = json.loads(raw)
+        result["question"] = request.question
+        return result
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": True, "message": "Something went wrong. Please try again."},
+        )
