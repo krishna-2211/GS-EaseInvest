@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import { getPortfolio } from '../../api/portfolio'
 import { getHealthScore } from '../../api/healthScore'
@@ -185,27 +185,34 @@ function AllocationBar({ allocation }) {
   )
 }
 
-function HoldingRow({ h }) {
+function HoldingRow({ h, navigate, portfolioCurrentValue }) {
   const gainLoss = (h.current ?? 0) - (h.invested ?? 0)
   const positive = (h.return_pct ?? 0) >= 0
   const gainColor = positive ? '#16a34a' : '#dc2626'
 
   return (
-    <div className="flex items-start justify-between py-4" style={{ borderBottom: '1px solid #e8eff8' }}>
+    <div
+      className="flex items-center justify-between py-4 cursor-pointer hover:bg-blue-50 rounded-lg px-1 -mx-1 transition-colors"
+      style={{ borderBottom: '1px solid #e8eff8' }}
+      onClick={() => navigate('/stock-detail', { state: { holding: h, portfolioCurrentValue } })}
+    >
       <div>
         <p className="font-medium text-gs-navy text-sm">{h.name}</p>
         <p className="text-xs text-gs-gray mt-0.5">
           Invested: {formatCurrency(h.invested)}
         </p>
       </div>
-      <div className="text-right">
-        <p className="font-bold text-gs-navy text-sm tabular-nums">{formatCurrency(h.current)}</p>
-        <p className="text-xs tabular-nums" style={{ color: gainColor }}>
-          {positive ? '+' : ''}{formatCurrency(gainLoss)}
-        </p>
-        <p className="text-xs tabular-nums" style={{ color: gainColor }}>
-          {positive ? '+' : ''}{formatPct(h.return_pct)}
-        </p>
+      <div className="flex items-center gap-2">
+        <div className="text-right">
+          <p className="font-bold text-gs-navy text-sm tabular-nums">{formatCurrency(h.current)}</p>
+          <p className="text-xs tabular-nums" style={{ color: gainColor }}>
+            {positive ? '+' : ''}{formatCurrency(gainLoss)}
+          </p>
+          <p className="text-xs tabular-nums" style={{ color: gainColor }}>
+            {positive ? '+' : ''}{formatPct(h.return_pct)}
+          </p>
+        </div>
+        <span className="text-xl font-light" style={{ color: '#acd4f1' }}>›</span>
       </div>
     </div>
   )
@@ -289,7 +296,7 @@ function AllocationPieChart({ stocks, mutualFunds }) {
   )
 }
 
-function HoldingsList({ stocks, mutualFunds }) {
+function HoldingsList({ stocks, mutualFunds, navigate, portfolioCurrentValue }) {
   const hasStocks = stocks?.length > 0
   const hasFunds = mutualFunds?.length > 0
   if (!hasStocks && !hasFunds) return null
@@ -298,7 +305,9 @@ function HoldingsList({ stocks, mutualFunds }) {
       {hasStocks && (
         <div>
           <p className="text-[10px] font-semibold text-gs-gray uppercase tracking-widest mb-1">Stocks</p>
-          {stocks.map((h, i) => <HoldingRow key={i} h={h} />)}
+          {stocks.map((h, i) => (
+            <HoldingRow key={i} h={h} navigate={navigate} portfolioCurrentValue={portfolioCurrentValue} />
+          ))}
         </div>
       )}
       {hasStocks && hasFunds && (
@@ -307,7 +316,9 @@ function HoldingsList({ stocks, mutualFunds }) {
       {hasFunds && (
         <div>
           <p className="text-[10px] font-semibold text-gs-gray uppercase tracking-widest mb-1">Mutual Funds</p>
-          {mutualFunds.map((h, i) => <HoldingRow key={i} h={h} />)}
+          {mutualFunds.map((h, i) => (
+            <HoldingRow key={i} h={h} navigate={navigate} portfolioCurrentValue={portfolioCurrentValue} />
+          ))}
         </div>
       )}
     </div>
@@ -316,6 +327,7 @@ function HoldingsList({ stocks, mutualFunds }) {
 
 export default function Dashboard() {
   const { currentUser } = useApp()
+  const navigate = useNavigate()
   const [portfolio, setPortfolio] = useState(null)
   const [healthScore, setHealthScore] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -389,6 +401,8 @@ export default function Dashboard() {
       <HoldingsList
         stocks={portfolio?.stocks ?? []}
         mutualFunds={portfolio?.mutual_funds ?? []}
+        navigate={navigate}
+        portfolioCurrentValue={portfolio?.current_value}
       />
 
       <AllocationPieChart

@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Onboarding from './pages/Onboarding'
 import InvestEntry from './pages/InvestEntry'
 import Rebalance from './pages/Rebalance'
+import StockDetail from './pages/StockDetail'
 
 const NAV_TABS = [
   { to: '/',           label: 'Home',      icon: HomeIcon },
@@ -113,9 +114,10 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/"          element={<OnboardingGuard />} />
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/invest"    element={<ProtectedRoute><InvestEntry /></ProtectedRoute>} />
-            <Route path="/rebalance" element={<ProtectedRoute><Rebalance /></ProtectedRoute>} />
+            <Route path="/dashboard"    element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/invest"       element={<ProtectedRoute><InvestEntry /></ProtectedRoute>} />
+            <Route path="/rebalance"    element={<ProtectedRoute><Rebalance /></ProtectedRoute>} />
+            <Route path="/stock-detail" element={<ProtectedRoute><StockDetail /></ProtectedRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>
