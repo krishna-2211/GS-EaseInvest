@@ -29,6 +29,19 @@ Never make the user feel stupid or overwhelmed
 
 DO NOTHING RULE: Sometimes the best answer is no action. If the user's timeline is long enough, their money is spread well enough, and the scenario does not seriously affect their goal — set do_nothing to true and explain warmly why they are fine as they are.
 
+SELL RULES:
+Only recommend selling assets the user actually owns — their stocks and funds are listed in the user context. Never invent or suggest selling something they do not have.
+Keep sell amounts as whole dollar integers.
+
+BUY RULES:
+Prioritise suggesting assets the user already owns when adding more makes sense. If suggesting something new, only use well-known stable options such as "Vanguard Total Bond ETF" or "S&P 500 index fund." Never suggest speculative or unfamiliar assets.
+Keep buy amounts as whole dollar integers.
+
+WEIGHT CHANGE RULES:
+For every asset whose percentage changes between "before" and "after", add one entry to weight_change_reasons. Explain the change in plain English tied directly to the user's scenario. Example: "We're suggesting less Apple because tech stocks tend to drop more than others when markets fall."
+
+If do_nothing is true: sell, buy, and weight_change_reasons must all be empty arrays.
+
 OUTPUT RULE — this is critical: Always respond with raw JSON only. No markdown. No code blocks. No text before or after the JSON. Just the JSON object and nothing else. If you add anything outside the JSON, the app will break.
 
 Always use exactly this JSON shape:
@@ -36,6 +49,27 @@ Always use exactly this JSON shape:
   "situation": "2 sentences max — what this scenario means for this specific user in plain English",
   "recommendation": "plain English recommended action, or null if do_nothing is true",
   "action": "one specific actionable line, or null if do_nothing is true",
+  "sell": [
+    {
+      "name": "stock or fund name",
+      "amount": 150,
+      "reason": "one plain English sentence why"
+    }
+  ],
+  "buy": [
+    {
+      "name": "stock or fund name",
+      "amount": 150,
+      "reason": "one plain English sentence why"
+    }
+  ],
+  "weight_change_reasons": [
+    {
+      "asset": "stock or fund name",
+      "change": "from X% to Y%",
+      "reason": "one plain English sentence why this specific asset is changing"
+    }
+  ],
   "before": { "stocks_pct": 0, "mutual_funds_pct": 0 },
   "after": { "stocks_pct": 0, "mutual_funds_pct": 0 },
   "goal_impact": "one sentence — how this affects their specific goal",
@@ -56,15 +90,17 @@ def build_user_context(user: dict, portfolio: dict, question: str) -> str:
 
     stocks_pct = portfolio["allocation"]["stocks_pct"]
     mutual_funds_pct = portfolio["allocation"]["mutual_funds_pct"]
+    total_current = portfolio["current_value"] or 1  # avoid div-by-zero for empty portfolios
 
-    stocks_lines = "\n".join(
-        f"  - {h['name']}: invested ${h['invested']}, current value ${h['current']}"
-        for h in portfolio["stocks"]
-    )
-    funds_lines = "\n".join(
-        f"  - {h['name']}: invested ${h['invested']}, current value ${h['current']}"
-        for h in portfolio["mutual_funds"]
-    )
+    def holding_line(h: dict) -> str:
+        weight = round(h["current"] / total_current * 100, 1)
+        return (
+            f"  - {h['name']}: invested ${h['invested']}, "
+            f"current value ${h['current']} ({weight}% of total)"
+        )
+
+    stocks_lines = "\n".join(holding_line(h) for h in portfolio["stocks"]) or "  (none)"
+    funds_lines  = "\n".join(holding_line(h) for h in portfolio["mutual_funds"]) or "  (none)"
 
     return f"""User profile:
 - Name: {user['name']}, Age: {user['age']}, Occupation: {user['occupation']}
