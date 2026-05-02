@@ -5,14 +5,21 @@ const PRESETS = [
 ]
 
 export default function ScenarioButtons({ onSubmit, question, setQuestion, loading }) {
+  const handlePreset = (preset) => {
+    setQuestion(preset)
+    onSubmit(preset)
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {PRESETS.map((preset) => (
         <button
           key={preset}
-          onClick={() => onSubmit(preset)}
+          onClick={() => handlePreset(preset)}
           disabled={loading}
-          className="w-full text-left bg-gs-bg border border-gs-pale text-gs-navy rounded-xl px-4 py-3 text-sm font-medium hover:border-gs-blue transition-colors disabled:opacity-50"
+          className="w-full text-left rounded-xl px-4 py-3 text-sm font-medium text-gs-navy
+                     border border-gs-pale bg-gs-bg
+                     hover:border-gs-blue transition-colors disabled:opacity-50"
         >
           {preset}
         </button>
@@ -25,12 +32,15 @@ export default function ScenarioButtons({ onSubmit, question, setQuestion, loadi
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onSubmit(question)}
           placeholder="Or ask your own question…"
-          className="flex-1 bg-gs-bg border border-gs-pale rounded-xl px-3 py-3 text-sm text-gs-navy placeholder:text-gs-gray focus:outline-none focus:ring-2 focus:ring-gs-blue"
+          className="flex-1 rounded-xl border border-gs-pale bg-gs-bg text-sm text-gs-navy
+                     placeholder:text-gs-gray focus:outline-none focus:ring-2 focus:ring-gs-blue"
+          style={{ padding: '12px' }}
         />
         <button
           onClick={() => onSubmit(question)}
           disabled={!question.trim() || loading}
-          className="bg-gs-navy text-white text-sm font-semibold px-4 py-3 rounded-xl hover:bg-gs-deep transition-colors disabled:opacity-40"
+          className="bg-gs-navy hover:bg-gs-deep text-white text-sm font-semibold
+                     rounded-xl px-5 transition-colors disabled:opacity-40"
         >
           Send
         </button>
