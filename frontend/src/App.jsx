@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Outlet, NavLink } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import NavBar from './components/NavBar'
 import Dashboard from './pages/Dashboard'
@@ -6,11 +6,88 @@ import Onboarding from './pages/Onboarding'
 import InvestEntry from './pages/InvestEntry'
 import Rebalance from './pages/Rebalance'
 
+const NAV_TABS = [
+  { to: '/',           label: 'Home',      icon: HomeIcon },
+  { to: '/dashboard',  label: 'Dashboard', icon: ChartIcon },
+  { to: '/rebalance',  label: 'Rebalance', icon: ScaleIcon },
+  { to: '/invest',     label: 'Invest',    icon: TrendIcon },
+]
+
+function HomeIcon({ color }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  )
+}
+
+function ChartIcon({ color }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6"  y1="20" x2="6"  y2="14" />
+    </svg>
+  )
+}
+
+function ScaleIcon({ color }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="3" x2="12" y2="21" />
+      <path d="M5 6l7-3 7 3" />
+      <path d="M5 6l-2 7h4L5 6z" />
+      <path d="M19 6l-2 7h4L19 6z" />
+    </svg>
+  )
+}
+
+function TrendIcon({ color }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  )
+}
+
+function BottomNav() {
+  return (
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-20 bg-white flex"
+      style={{ borderTop: '1px solid #e8eff8' }}
+    >
+      {NAV_TABS.map(({ to, label, icon: Icon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === '/'}
+          className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1"
+        >
+          {({ isActive }) => {
+            const color = isActive ? '#001E62' : '#666666'
+            return (
+              <>
+                <Icon color={color} />
+                <span className="text-[10px] font-medium" style={{ color }}>
+                  {label}
+                </span>
+              </>
+            )
+          }}
+        </NavLink>
+      ))}
+    </nav>
+  )
+}
+
 function Layout() {
   return (
-    <div className="min-h-screen bg-gs-bg">
+    <div className="min-h-screen bg-gs-bg pb-16">
       <NavBar />
       <Outlet />
+      <BottomNav />
     </div>
   )
 }
