@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Outlet, NavLink } from 'react-router-dom'
-import { AppProvider } from './context/AppContext'
+import { BrowserRouter, Routes, Route, Outlet, NavLink, Navigate } from 'react-router-dom'
+import { AppProvider, useApp } from './context/AppContext'
 import NavBar from './components/NavBar'
 import Dashboard from './pages/Dashboard'
 import Onboarding from './pages/Onboarding'
@@ -82,6 +82,18 @@ function BottomNav() {
   )
 }
 
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useApp()
+  if (!isAuthenticated) return <Navigate to="/" replace />
+  return children
+}
+
+function OnboardingGuard() {
+  const { isAuthenticated } = useApp()
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />
+  return <Onboarding />
+}
+
 function Layout() {
   return (
     <div className="min-h-screen bg-gs-bg pb-16">
@@ -98,10 +110,10 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
-            <Route path="/"          element={<Onboarding />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/invest"    element={<InvestEntry />} />
-            <Route path="/rebalance" element={<Rebalance />} />
+            <Route path="/"          element={<OnboardingGuard />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/invest"    element={<ProtectedRoute><InvestEntry /></ProtectedRoute>} />
+            <Route path="/rebalance" element={<ProtectedRoute><Rebalance /></ProtectedRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>
