@@ -1,15 +1,17 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import UserSwitcher from './UserSwitcher'
 
 export default function NavBar() {
-  const { isAuthenticated, logout } = useApp()
+  const { isAuthenticated, logout, currentUser, onboardingData, onboardedUserActive } = useApp()
   const navigate = useNavigate()
 
   const handleLogout = () => {
     logout()
     navigate('/')
   }
+
+  const displayName  = onboardedUserActive ? onboardingData?.name  : currentUser?.name
+  const displayStyle = onboardedUserActive ? onboardingData?.style : currentUser?.style
 
   return (
     <nav
@@ -20,15 +22,27 @@ export default function NavBar() {
         GS-EaseInvest
       </Link>
 
-      <UserSwitcher />
-
       {isAuthenticated && (
-        <button
-          onClick={handleLogout}
-          className="text-sm text-gs-gray hover:text-gs-navy transition-colors shrink-0"
-        >
-          Log out
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="text-sm font-medium" style={{ color: '#001E62' }}>{displayName}</span>
+            {displayStyle && (
+              <span
+                className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: '#acd4f1', color: '#001E62' }}
+              >
+                {displayStyle}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleLogout}
+            className="text-sm transition-colors shrink-0"
+            style={{ color: '#9ca3af' }}
+          >
+            Log out
+          </button>
+        </div>
       )}
     </nav>
   )

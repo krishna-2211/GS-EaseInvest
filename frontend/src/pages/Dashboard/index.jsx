@@ -5,6 +5,7 @@ import { getPortfolio } from '../../api/portfolio'
 import { getHealthScore } from '../../api/healthScore'
 import { formatCurrency, formatPct, salaryLabel, healthColor } from '../../utils/format'
 import DontPanicBanner from '../../components/DontPanicBanner'
+import UserSwitcher from '../../components/UserSwitcher'
 import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
@@ -362,6 +363,16 @@ export default function Dashboard() {
       {healthScore && (
         <HealthScoreCard score={healthScore} name={currentUser?.name} />
       )}
+
+      <div className="flex flex-col gap-2">
+        <p
+          className="text-[10px] font-semibold uppercase tracking-wider"
+          style={{ color: '#9ca3af' }}
+        >
+          Switch demo profile
+        </p>
+        <UserSwitcher />
+      </div>
 
       {portfolio && <PortfolioStatsGrid portfolio={portfolio} />}
 
