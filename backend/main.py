@@ -133,6 +133,75 @@ def get_portfolio(user_id: str):
     return calculate_portfolio(user)
 
 
+@app.get("/health-score/{user_id}")
+def get_health_score(user_id: str):
+    user = USERS.get(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
+
+    portfolio = calculate_portfolio(user)
+    hs = portfolio["health_score"]
+
+    stocks_pct = portfolio["allocation"]["stocks_pct"]
+    mf_pct = portfolio["allocation"]["mutual_funds_pct"]
+    total_return_pct = portfolio["total_return_pct"]
+    num_holdings = len(portfolio["stocks"]) + len(portfolio["mutual_funds"])
+
+    tips_pool = []
+
+    # Tip 1: always generated — about the stocks/funds split
+    if stocks_pct > 70:
+        tips_pool.append(
+            f"You have {stocks_pct}% of your money in stocks — moving a bit into funds could make things steadier if prices swing."
+        )
+    elif stocks_pct < 30:
+        tips_pool.append(
+            f"Only {stocks_pct}% of your money is in stocks — adding a little more could help it grow faster toward your goal of {user['goal']}."
+        )
+    else:
+        tips_pool.append(
+            f"Your split of {stocks_pct}% stocks and {mf_pct}% funds is balanced — that helps protect you if one area dips."
+        )
+
+    # Tip 2: always generated — about overall return
+    if total_return_pct >= 15:
+        tips_pool.append(
+            f"Your money has grown {total_return_pct}% overall — that's ahead of most first-time investors."
+        )
+    elif total_return_pct > 0:
+        tips_pool.append(
+            f"You're up {total_return_pct}% so far — a solid start toward your goal of {user['goal']}."
+        )
+    else:
+        tips_pool.append(
+            f"Your investments are down {abs(total_return_pct)}% right now — short-term dips are normal and most recoveries happen quietly over time."
+        )
+
+    # Tip 3: conditional — timeline and goal
+    if user["goal_years"] >= 10:
+        tips_pool.append(
+            f"With {user['goal_years']} years ahead of you, staying invested through ups and downs is one of the most powerful things you can do for your {user['goal']} goal."
+        )
+    elif user["goal_years"] < 3 and stocks_pct > 50:
+        tips_pool.append(
+            f"With only {user['goal_years']} year{'s' if user['goal_years'] != 1 else ''} left to reach your goal, shifting a little more into stable funds could protect what you've already built."
+        )
+
+    # Tip 4: conditional — number of investments
+    if num_holdings < 3:
+        tips_pool.append(
+            f"You own {num_holdings} investment{'s' if num_holdings != 1 else ''} right now — adding one more type could help spread the risk a bit."
+        )
+
+    return {
+        "score": hs["score"],
+        "label": hs["label"],
+        "color": hs["color"],
+        "reason": hs["reason"],
+        "tips": tips_pool[:2],
+    }
+
+
 class RebalanceRequest(BaseModel):
     user_id: str
     question: str
