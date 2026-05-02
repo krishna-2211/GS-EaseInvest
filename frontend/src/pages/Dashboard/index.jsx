@@ -9,6 +9,17 @@ import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
+const ONBOARDED_SCORE = {
+  score: null,
+  label: 'Ready to start',
+  color: 'blue',
+  reason: "You haven't invested yet — your score will appear once you make your first investment.",
+  tips: [
+    'Starting with just $100 a month is enough to build real wealth over time.',
+    'The earlier you start, the more time your money has to grow.',
+  ],
+}
+
 function Spinner() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
@@ -41,15 +52,19 @@ function HealthScoreCard({ score, name }) {
         </p>
 
         <div className="flex items-end gap-4">
-          <div>
-            <p className="text-white/50 text-xs mb-1 uppercase tracking-wide">Financial Health</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-bold text-white tabular-nums">
-                <NumberTicker value={score.score} className="text-white" />
-              </span>
-              <span className="text-white/40 text-lg">/100</span>
+          {score.score != null ? (
+            <div>
+              <p className="text-white/50 text-xs mb-1 uppercase tracking-wide">Financial Health</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl font-bold text-white tabular-nums">
+                  <NumberTicker value={score.score} className="text-white" />
+                </span>
+                <span className="text-white/40 text-lg">/100</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-white/50 text-xs uppercase tracking-wide">Financial Health</p>
+          )}
           {score.label && (
             <span
               className="text-xs font-semibold px-2.5 py-1 rounded-full mb-1"
@@ -60,13 +75,15 @@ function HealthScoreCard({ score, name }) {
           )}
         </div>
 
-        {/* Score bar */}
-        <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${score.score}%`, backgroundColor: '#acd4f1' }}
-          />
-        </div>
+        {/* Score bar — only shown when a score exists */}
+        {score.score != null && (
+          <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${score.score}%`, backgroundColor: '#acd4f1' }}
+            />
+          </div>
+        )}
 
         {score.reason && (
           <p className="text-sm" style={{ color: '#acd4f1' }}>
@@ -326,7 +343,7 @@ function HoldingsList({ stocks, mutualFunds, navigate, portfolioCurrentValue }) 
 }
 
 export default function Dashboard() {
-  const { currentUser } = useApp()
+  const { currentUser, activeUser, onboardedUserActive, onboardingData } = useApp()
   const navigate = useNavigate()
   const [portfolio, setPortfolio] = useState(null)
   const [healthScore, setHealthScore] = useState(null)
@@ -334,7 +351,13 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    if (!currentUser) return
+    if (onboardedUserActive) {
+      setPortfolio(null)
+      setHealthScore(null)
+      setLoading(false)
+      return
+    }
+    if (!currentUser?.user_id) return
     setLoading(true)
     setError(null)
     Promise.all([
@@ -347,7 +370,7 @@ export default function Dashboard() {
       })
       .catch(() => setError('Could not load data. Is the backend running?'))
       .finally(() => setLoading(false))
-  }, [currentUser])
+  }, [currentUser, onboardedUserActive])
 
   if (loading) return <Spinner />
 
@@ -367,12 +390,14 @@ export default function Dashboard() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
 
-      {portfolio?.market_alert && (
+      {!onboardedUserActive && portfolio?.market_alert && (
         <DontPanicBanner message={portfolio.market_alert} />
       )}
 
-      {healthScore && (
-        <HealthScoreCard score={healthScore} name={currentUser?.name} />
+      {onboardedUserActive ? (
+        <HealthScoreCard score={ONBOARDED_SCORE} name={onboardingData?.name} />
+      ) : (
+        healthScore && <HealthScoreCard score={healthScore} name={currentUser?.name} />
       )}
 
       {portfolio && <PortfolioStatsGrid portfolio={portfolio} />}

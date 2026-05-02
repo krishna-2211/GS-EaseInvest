@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 export default function NavBar() {
-  const { isAuthenticated, logout, currentUser, onboardingData, onboardedUserActive } = useApp()
+  const { isAuthenticated, logout, activeUser } = useApp()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -10,8 +10,8 @@ export default function NavBar() {
     navigate('/')
   }
 
-  const displayName  = onboardedUserActive ? onboardingData?.name  : currentUser?.name
-  const displayStyle = onboardedUserActive ? onboardingData?.style : currentUser?.style
+  const displayName  = activeUser?.name
+  const displayStyle = activeUser?.style
 
   return (
     <nav

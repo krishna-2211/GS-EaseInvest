@@ -49,8 +49,17 @@ export function AppProvider({ children }) {
       .catch(() => {/* keep fallback */})
   }, [])
 
+  const activeUser = onboardedUserActive && onboardingData
+    ? {
+        user_id: null,
+        name: onboardingData.name,
+        style: onboardingData.style,
+        goal: onboardingData.goal,
+      }
+    : currentUser
+
   return (
-    <AppContext.Provider value={{ users, currentUser, onboardingData, onboardedUserActive, isAuthenticated, completeOnboarding, login, logout, switchToUser, switchToOnboardedUser }}>
+    <AppContext.Provider value={{ users, currentUser, activeUser, onboardingData, onboardedUserActive, isAuthenticated, completeOnboarding, login, logout, switchToUser, switchToOnboardedUser }}>
       {children}
     </AppContext.Provider>
   )
