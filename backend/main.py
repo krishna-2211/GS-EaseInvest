@@ -76,6 +76,23 @@ def calculate_portfolio(user: dict) -> dict:
         score -= 10
         deductions.append((10, "With a short-term goal, having more than half your portfolio in stocks is risky."))
 
+    max_single_stock_pct = max((h["current"] / current_value * 100 for h in stocks), default=0)
+    if max_single_stock_pct > 25:
+        score -= 10
+        deductions.append((10, "One company makes up more than a quarter of your total investments — that's a lot riding on a single stock."))
+
+    if len(stocks) > 2 and len(mutual_funds) < 2:
+        score -= 10
+        deductions.append((10, "You own several stocks but not enough funds — adding a fund could help smooth out the ride."))
+
+    if user["risk_style"] == "YOLO" and user["goal_years"] > 10:
+        score -= 5
+        deductions.append((5, "Your high-risk style and very long timeline are a slight mismatch — there's no rush, so a steadier approach could serve you better."))
+
+    if user["risk_style"] == "Careful" and stocks_pct > 50:
+        score -= 10
+        deductions.append((10, "You prefer playing it safe, but more than half your money is in stocks — that's more risk than your style suggests you're comfortable with."))
+
     if deductions:
         health_reason = max(deductions, key=lambda x: x[0])[1]
     else:
@@ -86,7 +103,7 @@ def calculate_portfolio(user: dict) -> dict:
     elif score >= 60:
         health_label, health_color = "Pretty healthy", "yellow"
     else:
-        health_label, health_color = "At risk", "red"
+        health_label, health_color = "Needs attention", "red"
 
     return {
         "user_id": user["user_id"],
