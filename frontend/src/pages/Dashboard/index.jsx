@@ -342,6 +342,131 @@ function HoldingsList({ stocks, mutualFunds, navigate, portfolioCurrentValue }) 
   )
 }
 
+function FirstStepGuide({ onboardingData }) {
+  const navigate = useNavigate()
+  const investAmount = Number(onboardingData?.investAmount) || 100
+  const projection = Math.round(investAmount * 12 * ((Math.pow(1.07, 10) - 1) / 0.07))
+
+  const DoneBadge = () => (
+    <span
+      className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
+      style={{ backgroundColor: '#e8f5ee', color: '#16a34a', border: '1px solid #9fe1cb' }}
+    >
+      Done ✓
+    </span>
+  )
+
+  const UpNextBadge = () => (
+    <span
+      className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
+      style={{ backgroundColor: '#001E62', color: '#ffffff' }}
+    >
+      Up next →
+    </span>
+  )
+
+  const StepCircle = ({ n }) => (
+    <div
+      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-semibold text-white"
+      style={{ backgroundColor: '#001E62' }}
+    >
+      {n}
+    </div>
+  )
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Header */}
+      <div style={{ marginBottom: 8 }}>
+        <p className="font-semibold" style={{ color: '#001E62', fontSize: 20 }}>
+          Your journey starts here, {onboardingData?.name}
+        </p>
+        <p className="mt-1 text-sm" style={{ color: '#666666' }}>
+          Most people start with just ${investAmount} a month. Here's your path.
+        </p>
+      </div>
+
+      {/* Step 1 */}
+      <div
+        className="bg-white rounded-xl p-4 flex items-center gap-3 cursor-pointer"
+        style={{ border: '1px solid #9fe1cb' }}
+        onClick={() => navigate('/invest')}
+      >
+        <StepCircle n={1} />
+        <div className="flex-1">
+          <p className="font-bold text-sm" style={{ color: '#001E62' }}>
+            Learn what you're investing in
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
+            Understand stocks and funds in plain English — no confusing terms
+          </p>
+        </div>
+        <DoneBadge />
+      </div>
+
+      {/* Step 2 */}
+      <div
+        className="bg-white rounded-xl p-4 flex items-center gap-3"
+        style={{ border: '1px solid #9fe1cb' }}
+      >
+        <StepCircle n={2} />
+        <div className="flex-1">
+          <p className="font-bold text-sm" style={{ color: '#001E62' }}>
+            Set your goals and style
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
+            You want to {onboardingData?.goal} · You're a {onboardingData?.style} investor
+          </p>
+        </div>
+        <DoneBadge />
+      </div>
+
+      {/* Step 3 */}
+      <div
+        className="bg-white rounded-xl p-4 flex flex-col gap-3"
+        style={{ border: '1px solid #acd4f1', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+      >
+        <div className="flex items-center gap-3">
+          <StepCircle n={3} />
+          <div className="flex-1">
+            <p className="font-bold text-sm" style={{ color: '#001E62' }}>
+              Make your first investment
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
+              Start with ${investAmount}/month in a stable fund. Small steps build big futures.
+            </p>
+          </div>
+          <UpNextBadge />
+        </div>
+        <button
+          onClick={() => navigate('/invest')}
+          className="w-full text-sm font-semibold py-2.5 rounded-xl transition-colors hover:opacity-90"
+          style={{ backgroundColor: '#001E62', color: '#ffffff' }}
+        >
+          Start investing →
+        </button>
+      </div>
+
+      {/* Motivation card */}
+      <div
+        className="bg-white rounded-xl p-4"
+        style={{ border: '1px solid #acd4f1', marginTop: 8 }}
+      >
+        <p className="font-bold text-sm mb-1.5" style={{ color: '#001E62' }}>Did you know?</p>
+        <p className="text-sm" style={{ color: '#666666' }}>
+          Investing ${investAmount} every month for 10 years could grow to{' '}
+          <span className="font-bold" style={{ color: '#001E62' }}>
+            {formatCurrency(projection)}
+          </span>
+        </p>
+        <p className="mt-1" style={{ color: '#666666', fontSize: 11 }}>
+          Based on average stock market returns of 7% per year
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { currentUser, activeUser, onboardedUserActive, onboardingData } = useApp()
   const navigate = useNavigate()
@@ -399,6 +524,8 @@ export default function Dashboard() {
       ) : (
         healthScore && <HealthScoreCard score={healthScore} name={currentUser?.name} />
       )}
+
+      {onboardedUserActive && <FirstStepGuide onboardingData={onboardingData} />}
 
       {portfolio && <PortfolioStatsGrid portfolio={portfolio} />}
 
