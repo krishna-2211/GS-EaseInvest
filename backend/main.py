@@ -3,9 +3,11 @@
 import json
 import os
 import uuid
+from datetime import datetime
 
 import anthropic
 import httpx
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,11 +31,109 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Portfolio monitoring ──────────────────────────────────────────────────────
+
+_TICKER_MAP = {
+    "Apple":                "AAPL",
+    "Tesla":                "TSLA",
+    "NVIDIA":               "NVDA",
+    "Microsoft":            "MSFT",
+    "Johnson & Johnson":    "JNJ",
+    "Vanguard S&P 500 ETF": "VOO",
+    "Fidelity Growth Fund": "FGRIX",
+}
+
+_BASE_PRICES = {
+    "AAPL":  190,
+    "TSLA":  245,
+    "NVDA":  875,
+    "MSFT":  415,
+    "JNJ":   155,
+    "VOO":   495,
+    "FGRIX":  24,
+}
+
+alerts: dict = {}  # user_id → { stock, drop_pct, message, timestamp, dismissed }
+
+
+async def _fetch_price(ticker: str) -> float | None:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                url,
+                params={"interval": "1d", "range": "1d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=5,
+            )
+            return r.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    except Exception:
+        return None
+
+
+async def monitor_portfolios():
+    claude = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    for user_id, user in USERS.items():
+        for holding in user["portfolio"]["stocks"]:
+            ticker = _TICKER_MAP.get(holding["name"])
+            if not ticker:
+                continue
+            base_price = _BASE_PRICES.get(ticker)
+            if not base_price:
+                continue
+
+            live_price = await _fetch_price(ticker)
+            if live_price is None:
+                continue
+
+            # baseline price per share = mock current value / estimated shares
+            shares = holding["invested"] / base_price
+            baseline_price = holding["current"] / shares
+            drop_pct = (baseline_price - live_price) / baseline_price * 100
+
+            if drop_pct <= 5:
+                continue
+
+            prompt = (
+                f"User {user['name']} holds {holding['name']}. It just dropped {drop_pct:.1f}%. "
+                f"Their goal is {user['goal']}, style is {user['risk_style']}, "
+                f"timeline {user['goal_years']} years. "
+                f"In 2 sentences max, give them a calm, plain-English alert. "
+                f"No jargon. Be reassuring but honest."
+            )
+            try:
+                resp = claude.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=150,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                message = resp.content[0].text.strip()
+            except Exception:
+                message = (
+                    f"{holding['name']} dropped {drop_pct:.1f}% — short-term dips are normal. "
+                    f"Stay focused on your {user['goal']} goal."
+                )
+
+            alerts[user_id] = {
+                "stock":     holding["name"],
+                "drop_pct":  round(drop_pct, 1),
+                "message":   message,
+                "timestamp": datetime.utcnow().isoformat(),
+                "dismissed": False,
+            }
+
+
+scheduler = AsyncIOScheduler()
+scheduler.add_job(monitor_portfolios, "interval", minutes=60)
+
+
 @app.on_event("startup")
 async def startup_event():
     create_tables()
     Base.metadata.create_all(bind=engine)
     seed_users()
+    scheduler.start()
 
 
 
@@ -299,6 +399,94 @@ def rebalance(request: RebalanceRequest):
         )
 
 
+def _build_chat_system_prompt(user: dict, portfolio: dict) -> str:
+    stocks_summary = ", ".join(
+        f"{h['name']} (${h['current']})" for h in portfolio["stocks"]
+    ) or "no stocks yet"
+    funds_summary = ", ".join(
+        f"{h['name']} (${h['current']})" for h in portfolio["mutual_funds"]
+    ) or "no funds yet"
+
+    return f"""You are a calm, friendly financial companion for {user['name']}.
+
+Their profile:
+- Goal: {user['goal']}
+- Style: {user['risk_style']} investor
+- Timeline: {user['goal_years']} years
+- Monthly income: ${user['monthly_income']}
+- Stocks: {stocks_summary}
+- Funds: {funds_summary}
+- Total invested: ${portfolio['total_invested']}, current value: ${portfolio['current_value']}
+
+Rules you must follow:
+- Zero financial jargon. Plain English only.
+- Be calm and reassuring, never alarming.
+- If you need more info before advising, ask ONE question.
+- When giving a recommendation, always include SITUATION, ACTION, and CONFIDENCE.
+- Never give generic advice — always reference their actual holdings and goal.
+- If no action is needed, say so warmly.
+
+OUTPUT RULE — critical: respond ONLY with raw JSON, no markdown, no code blocks:
+{{
+  "reply": "your full conversational response in plain English",
+  "needs_clarification": true or false,
+  "clarification_question": "a single question string, or null",
+  "has_recommendation": true or false,
+  "recommendation": {{
+    "situation": "what this means for them in plain English",
+    "action": "one specific thing to do",
+    "confidence_pct": 82
+  }}
+}}
+Set recommendation to null when has_recommendation is false."""
+
+
+class RebalanceChatRequest(BaseModel):
+    user_id: str
+    messages: list[dict]
+
+
+_CHAT_FALLBACK = {
+    "reply": "Sorry, I'm having trouble right now — please try again in a moment.",
+    "needs_clarification": False,
+    "clarification_question": None,
+    "has_recommendation": False,
+    "recommendation": None,
+}
+
+
+@app.post("/rebalance/chat")
+def rebalance_chat(request: RebalanceChatRequest):
+    user = USERS.get(request.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
+
+    raw = None
+    try:
+        portfolio = calculate_portfolio(user)
+        system = _build_chat_system_prompt(user, portfolio)
+
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=800,
+            system=system,
+            messages=request.messages,
+        )
+
+        raw = response.content[0].text.strip()
+        return json.loads(raw)
+
+    except json.JSONDecodeError:
+        # Claude returned prose instead of JSON — wrap it gracefully
+        return {**_CHAT_FALLBACK, "reply": raw or _CHAT_FALLBACK["reply"]}
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": True, "message": "Something went wrong. Please try again."},
+        )
+
+
 # ── Auth helpers ─────────────────────────────────────────────────────────────
 
 def _user_response(db_user: User, token: str) -> dict:
@@ -376,6 +564,35 @@ def me(user_id: str = Depends(get_current_user)):
         return {"user_id": user.user_id, "name": user.name, "email": user.email, "style": user.style, "goal": user.goal}
     finally:
         db.close()
+
+
+# ── Alert endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/alerts/{user_id}")
+def get_alert(user_id: str):
+    alert = alerts.get(user_id)
+    if not alert or alert["dismissed"]:
+        return {"has_alert": False}
+    return {
+        "has_alert": True,
+        "stock":     alert["stock"],
+        "drop_pct":  alert["drop_pct"],
+        "message":   alert["message"],
+        "timestamp": alert["timestamp"],
+    }
+
+
+@app.post("/alerts/{user_id}/dismiss")
+def dismiss_alert(user_id: str):
+    if user_id in alerts:
+        alerts[user_id]["dismissed"] = True
+    return {"dismissed": True}
+
+
+@app.post("/alerts/run-now")
+async def run_monitor_now():
+    await monitor_portfolios()
+    return {"status": "done", "checked_users": list(USERS.keys())}
 
 
 # ── Market data ───────────────────────────────────────────────────────────────

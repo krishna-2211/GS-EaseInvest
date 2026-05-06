@@ -5,6 +5,7 @@ import { getPortfolio } from '../../api/portfolio'
 import { getHealthScore } from '../../api/healthScore'
 import { formatCurrency, formatPct, salaryLabel, healthColor } from '../../utils/format'
 import DontPanicBanner from '../../components/DontPanicBanner'
+import MonitorAlert from '../../components/MonitorAlert'
 import GrowthCalculator from '../../components/GrowthCalculator'
 import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
@@ -539,6 +540,7 @@ function FirstStepGuide({ onboardingData }) {
   )
 }
 
+
 function EmptyPortfolioCard({ name }) {
   const firstName = name?.split(' ')[0] ?? 'there'
   return (
@@ -646,6 +648,10 @@ export default function Dashboard() {
 
       {!onboardedUserActive && portfolio?.market_alert && (
         <DontPanicBanner message={portfolio.market_alert} />
+      )}
+
+      {!onboardedUserActive && currentUser?.user_id && (
+        <MonitorAlert userId={currentUser.user_id} />
       )}
 
       {onboardedUserActive ? (
