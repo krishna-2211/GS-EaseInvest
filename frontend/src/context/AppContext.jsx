@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { getUsers } from '../api/users'
 import { loginWithEmail as authLogin, register, getMe } from '../api/auth'
+import { getSuggestion } from '../api/onboardingAdvisor'
 import { saveToken, getToken, removeToken, isTokenValid } from '../utils/token'
 
 const FALLBACK_USERS = [
@@ -16,6 +17,7 @@ export function AppProvider({ children }) {
   const [onboardingData, setOnboardingData] = useState(null)
   const [onboardedUserActive, setOnboardedUserActive] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(isTokenValid)
+  const [advisorSuggestion, setAdvisorSuggestion] = useState(null)
 
   // Restore session from stored token on mount
   useEffect(() => {
@@ -55,6 +57,18 @@ export function AppProvider({ children }) {
     saveToken(response.access_token)
     setCurrentUser(response.user)
     setIsAuthenticated(true)
+    setOnboardedUserActive(true)
+    getSuggestion({
+      name:           data.name,
+      occupation:     data.occupation,
+      age:            Number(data.age),
+      income:         Number(data.income),
+      invest_amount:  Number(data.investAmount),
+      style:          data.style,
+      goal:           data.goal,
+      years:          Number(data.years),
+      panic_behavior: data.panicBehavior || 'I stay calm',
+    }).then(setAdvisorSuggestion).catch(() => {})
   }
 
   const loginWithEmail = async (email, password) => {
@@ -109,6 +123,8 @@ export function AppProvider({ children }) {
       onboardingData,
       onboardedUserActive,
       isAuthenticated,
+      advisorSuggestion,
+      setAdvisorSuggestion,
       completeOnboarding,
       loginWithEmail,
       login,

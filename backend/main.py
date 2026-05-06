@@ -1,5 +1,6 @@
 # Run with: uvicorn main:app --reload
 
+import asyncio
 import json
 import os
 import uuid
@@ -487,6 +488,167 @@ def rebalance_chat(request: RebalanceChatRequest):
         )
 
 
+# ── Simulate endpoint ─────────────────────────────────────────────────────────
+
+class SimulateRequest(BaseModel):
+    user_id: str
+    ticker:  str
+    name:    str
+    amount:  float
+    type:    str  # "stock" or "fund"
+
+
+@app.post("/simulate")
+def simulate(request: SimulateRequest):
+    user = USERS.get(request.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
+
+    portfolio = calculate_portfolio(user)
+
+    current_value  = portfolio["current_value"] or 0
+    stocks_value   = sum(h["current"] for h in portfolio["stocks"])
+    funds_value    = sum(h["current"] for h in portfolio["mutual_funds"])
+
+    new_total      = current_value + request.amount
+    if request.type == "stock":
+        new_stocks_value = stocks_value + request.amount
+        new_funds_value  = funds_value
+    else:
+        new_stocks_value = stocks_value
+        new_funds_value  = funds_value + request.amount
+
+    new_stocks_pct = round(new_stocks_value / new_total * 100, 1) if new_total else 0
+    new_funds_pct  = round(100 - new_stocks_pct, 1)
+
+    before_stocks_pct = round(stocks_value / current_value * 100, 1) if current_value else 0
+    before_funds_pct  = round(100 - before_stocks_pct, 1)
+
+    prompt = (
+        f"User {user['name']} has a portfolio worth ${current_value}. "
+        f"Goal: {user['goal']}, Style: {user['risk_style']}, Timeline: {user['goal_years']} years. "
+        f"They want to add ${int(request.amount)} of {request.name} ({request.ticker}). "
+        f"Current allocation: {before_stocks_pct}% stocks, {before_funds_pct}% funds. "
+        f"New allocation would be: {new_stocks_pct}% stocks, {new_funds_pct}% funds.\n\n"
+        f"In 2-3 sentences, tell them:\n"
+        f"1. Whether this is a good fit for their goal and style\n"
+        f"2. One specific thing to watch out for\n"
+        f"Be calm, plain English, no jargon.\n\n"
+        f"Reply with JSON only in this exact shape:\n"
+        f'{{ "ai_insight": "your 2-3 sentence response", "good_fit": true or false }}'
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        parsed = json.loads(response.content[0].text.strip())
+        ai_insight = parsed.get("ai_insight", "")
+        good_fit   = bool(parsed.get("good_fit", True))
+    except Exception:
+        ai_insight = (
+            f"Adding {request.name} would shift your allocation to "
+            f"{new_stocks_pct}% stocks — review whether that matches your {user['goal']} goal."
+        )
+        good_fit = True
+
+    return {
+        "ticker": request.ticker,
+        "name":   request.name,
+        "amount": request.amount,
+        "before": {
+            "total_value": round(current_value, 2),
+            "stocks_pct":  before_stocks_pct,
+            "funds_pct":   before_funds_pct,
+        },
+        "after": {
+            "total_value": round(new_total, 2),
+            "stocks_pct":  new_stocks_pct,
+            "funds_pct":   new_funds_pct,
+        },
+        "ai_insight": ai_insight,
+        "good_fit":   good_fit,
+    }
+
+
+# ── Onboarding suggestion ─────────────────────────────────────────────────────
+
+class OnboardingSuggestRequest(BaseModel):
+    name:             str
+    occupation:       str
+    age:              int
+    income:           float
+    invest_amount:    float
+    style:            str
+    goal:             str
+    years:            int
+    panic_behavior:   str
+
+
+@app.post("/onboarding/suggest")
+def onboarding_suggest(req: OnboardingSuggestRequest):
+    prompt = (
+        f"New investor profile:\n"
+        f"- Name: {req.name}, Age: {req.age}, Occupation: {req.occupation}\n"
+        f"- Monthly income: ${req.income}, Can invest: ${req.invest_amount}/month\n"
+        f"- Goal: {req.goal} in {req.years} years\n"
+        f"- Style: {req.style}\n"
+        f"- When markets drop they: {req.panic_behavior}\n\n"
+        f"Suggest a simple starter portfolio for them.\n"
+        f"They are a BEGINNER — keep it very simple, max 4 holdings.\n\n"
+        f"Respond in this exact JSON format:\n"
+        f'{{\n'
+        f'  "greeting": "one warm personalized sentence welcoming them",\n'
+        f'  "summary": "2 sentences explaining your overall strategy for them",\n'
+        f'  "suggested_holdings": [\n'
+        f'    {{\n'
+        f'      "name": "Vanguard S&P 500 ETF",\n'
+        f'      "ticker": "VOO",\n'
+        f'      "type": "fund",\n'
+        f'      "allocation_pct": 50,\n'
+        f'      "monthly_amount": 100,\n'
+        f'      "reason": "one plain English sentence why this fits them"\n'
+        f'    }}\n'
+        f'  ],\n'
+        f'  "first_tip": "one actionable plain English tip for their first week",\n'
+        f'  "encouragement": "one warm closing sentence"\n'
+        f'}}\n\n'
+        f"Rules:\n"
+        f"- Max 4 holdings total\n"
+        f"- Allocation percentages must add up to 100\n"
+        f"- Match style: Careful = more funds/bonds, YOLO = more stocks\n"
+        f"- Match timeline: short (1-3yr) = safer, long (10yr+) = growth\n"
+        f"- monthly_amount must add up to invest_amount\n"
+        f"- Only suggest from these tickers: AAPL, MSFT, GOOGL, AMZN, JNJ, VOO, VTI, BND, AGG, SCHD\n"
+        f"- Return ONLY the JSON, no other text"
+    )
+
+    try:
+        client   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model      = "claude-sonnet-4-20250514",
+            max_tokens = 1024,
+            system     = "You are a calm, friendly financial advisor for first-time investors. Give beginner-friendly advice with zero jargon.",
+            messages   = [{"role": "user", "content": prompt}],
+        )
+        raw  = response.content[0].text.strip()
+        data = json.loads(raw)
+        return data
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="We had trouble generating your suggestions. Please try again.",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Something went wrong reaching our advisor. Please try again.",
+        )
+
+
 # ── Auth helpers ─────────────────────────────────────────────────────────────
 
 def _user_response(db_user: User, token: str) -> dict:
@@ -610,3 +772,68 @@ async def get_stock_price(ticker: str):
             return {"ticker": ticker, "price": round(price, 2)}
     except Exception:
         return {"ticker": ticker, "price": None}
+
+
+# ── Stocks & funds catalogue ──────────────────────────────────────────────────
+
+_STOCKS = [
+    {"name": "Apple",              "ticker": "AAPL",  "sector": "Technology",  "risk": "Low-Medium",  "desc": "World's most valuable company, makes iPhone and Mac"},
+    {"name": "Microsoft",          "ticker": "MSFT",  "sector": "Technology",  "risk": "Low-Medium",  "desc": "Powers software and cloud services used by billions"},
+    {"name": "NVIDIA",             "ticker": "NVDA",  "sector": "Technology",  "risk": "Medium-High", "desc": "Leading chip maker behind AI and gaming"},
+    {"name": "Alphabet",           "ticker": "GOOGL", "sector": "Technology",  "risk": "Low-Medium",  "desc": "Parent company of Google and YouTube"},
+    {"name": "Amazon",             "ticker": "AMZN",  "sector": "Consumer",    "risk": "Medium",      "desc": "E-commerce and cloud computing giant"},
+    {"name": "Meta",               "ticker": "META",  "sector": "Technology",  "risk": "Medium",      "desc": "Owns Facebook, Instagram and WhatsApp"},
+    {"name": "Tesla",              "ticker": "TSLA",  "sector": "Automotive",  "risk": "High",        "desc": "Leading electric vehicle and energy company"},
+    {"name": "Berkshire Hathaway", "ticker": "BRK-B", "sector": "Finance",     "risk": "Low",         "desc": "Warren Buffett's diversified holding company"},
+    {"name": "Johnson & Johnson",  "ticker": "JNJ",   "sector": "Healthcare",  "risk": "Low",         "desc": "Healthcare giant with 130+ years of history"},
+    {"name": "JPMorgan Chase",     "ticker": "JPM",   "sector": "Finance",     "risk": "Low-Medium",  "desc": "America's largest bank by assets"},
+    {"name": "Visa",               "ticker": "V",     "sector": "Finance",     "risk": "Low-Medium",  "desc": "Global payments network used in 200+ countries"},
+    {"name": "Procter & Gamble",   "ticker": "PG",    "sector": "Consumer",    "risk": "Low",         "desc": "Makes everyday brands like Tide, Pampers, Gillette"},
+    {"name": "UnitedHealth",       "ticker": "UNH",   "sector": "Healthcare",  "risk": "Low-Medium",  "desc": "Largest health insurance company in the US"},
+    {"name": "Exxon Mobil",        "ticker": "XOM",   "sector": "Energy",      "risk": "Medium",      "desc": "One of the world's largest oil and gas companies"},
+    {"name": "Home Depot",         "ticker": "HD",    "sector": "Consumer",    "risk": "Low-Medium",  "desc": "Largest home improvement retailer in the US"},
+]
+
+_FUNDS = [
+    {"name": "Vanguard S&P 500 ETF",          "ticker": "VOO",   "type": "Index Fund",    "risk": "Low",         "desc": "Tracks 500 biggest US companies — most popular beginner fund"},
+    {"name": "Fidelity Growth Fund",           "ticker": "FGRIX", "type": "Growth",        "risk": "Medium",      "desc": "Focuses on companies expected to grow faster than average"},
+    {"name": "iShares Core US Aggregate Bond", "ticker": "AGG",   "type": "Bond",          "risk": "Low",         "desc": "Diversified bond fund for stability and income"},
+    {"name": "Vanguard Total Stock Market",    "ticker": "VTI",   "type": "Index Fund",    "risk": "Low",         "desc": "Owns a piece of every US publicly traded company"},
+    {"name": "Invesco QQQ Trust",              "ticker": "QQQ",   "type": "Tech Index",    "risk": "Medium-High", "desc": "Tracks the 100 largest Nasdaq companies, heavy on tech"},
+    {"name": "Vanguard Total Bond Market",     "ticker": "BND",   "type": "Bond",          "risk": "Low",         "desc": "Broad exposure to US investment grade bonds"},
+    {"name": "ARK Innovation ETF",             "ticker": "ARKK",  "type": "Active",        "risk": "High",        "desc": "Actively managed fund focused on disruptive innovation"},
+    {"name": "Vanguard Dividend Appreciation", "ticker": "VIG",   "type": "Dividend",      "risk": "Low-Medium",  "desc": "Companies with a history of growing their dividends"},
+    {"name": "iShares MSCI Emerging Markets",  "ticker": "EEM",   "type": "International", "risk": "High",        "desc": "Exposure to fast-growing economies like China, India, Brazil"},
+    {"name": "Schwab US Dividend Equity",      "ticker": "SCHD",  "type": "Dividend",      "risk": "Low-Medium",  "desc": "High quality US companies that pay reliable dividends"},
+    {"name": "Vanguard Real Estate ETF",       "ticker": "VNQ",   "type": "Real Estate",   "risk": "Medium",      "desc": "Invest in real estate without buying property"},
+    {"name": "SPDR Gold Shares",               "ticker": "GLD",   "type": "Commodity",     "risk": "Medium",      "desc": "Tracks the price of gold — a classic safe haven asset"},
+    {"name": "Fidelity Balanced Fund",         "ticker": "FBALX", "type": "Balanced",      "risk": "Low-Medium",  "desc": "Mix of stocks and bonds managed for steady growth"},
+    {"name": "Vanguard Growth ETF",            "ticker": "VUG",   "type": "Growth",        "risk": "Medium",      "desc": "Large US growth companies like Apple, Microsoft, Amazon"},
+    {"name": "iShares Core S&P Mid-Cap",       "ticker": "IJH",   "type": "Index Fund",    "risk": "Medium",      "desc": "Mid-sized US companies with strong growth potential"},
+]
+
+
+async def _enrich_with_prices(items: list[dict]) -> list[dict]:
+    prices = await asyncio.gather(
+        *[_fetch_price(item["ticker"]) for item in items],
+        return_exceptions=True,
+    )
+    result = []
+    for item, price in zip(items, prices):
+        live = None if isinstance(price, Exception) else price
+        result.append({
+            **item,
+            "price":           round(live, 2) if live is not None else None,
+            "price_available": live is not None,
+        })
+    return result
+
+
+@app.get("/stocks/list")
+async def list_stocks():
+    return await _enrich_with_prices(_STOCKS)
+
+
+@app.get("/funds/list")
+async def list_funds():
+    return await _enrich_with_prices(_FUNDS)

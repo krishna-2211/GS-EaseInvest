@@ -7,6 +7,7 @@ import { formatCurrency, formatPct, salaryLabel, healthColor } from '../../utils
 import DontPanicBanner from '../../components/DontPanicBanner'
 import MonitorAlert from '../../components/MonitorAlert'
 import GrowthCalculator from '../../components/GrowthCalculator'
+import StarterPlanCard from '../../components/StarterPlanCard'
 import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
@@ -559,7 +560,9 @@ function EmptyPortfolioCard({ name }) {
 }
 
 export default function Dashboard() {
-  const { currentUser, activeUser, onboardedUserActive, onboardingData } = useApp()
+  const { currentUser, activeUser, onboardedUserActive, onboardingData, advisorSuggestion } = useApp()
+  console.log('onboardedUserActive:', onboardedUserActive)
+  console.log('advisorSuggestion:', advisorSuggestion)
   const navigate = useNavigate()
   const [portfolio, setPortfolio] = useState(null)
   const [healthScore, setHealthScore] = useState(null)
@@ -661,6 +664,23 @@ export default function Dashboard() {
       )}
 
       {onboardedUserActive && <FirstStepGuide onboardingData={onboardingData} />}
+
+      {onboardedUserActive && (
+        advisorSuggestion
+          ? <StarterPlanCard suggestion={advisorSuggestion} />
+          : (
+            <div
+              className="rounded-2xl p-6 flex flex-col gap-3 animate-pulse"
+              style={{ backgroundColor: '#f4f8fd' }}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#9ca3af' }}>
+                Building your starter plan...
+              </p>
+              <div className="h-3 rounded w-3/4" style={{ backgroundColor: '#e2e8f0' }} />
+              <div className="h-3 rounded w-1/2" style={{ backgroundColor: '#e2e8f0' }} />
+            </div>
+          )
+      )}
 
       {!onboardedUserActive && !portfolio && (
         <EmptyPortfolioCard name={currentUser?.name} />
