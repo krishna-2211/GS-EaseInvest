@@ -54,14 +54,27 @@ function LandingScreen({ onNew, onExisting }) {
 
 // ─── Login screen ─────────────────────────────────────────────────────────────
 
-const LOGIN_USERS = [
-  { user_id: 'user_001', name: 'Pralay' },
-  { user_id: 'user_002', name: 'Krishna' },
-]
-
-function LoginScreen({ onBack, onSignIn }) {
-  const [selectedUserId, setSelectedUserId] = useState('user_001')
+function LoginScreen({ onBack }) {
+  const navigate = useNavigate()
+  const { loginWithEmail } = useApp()
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState(null)
+
+  const handleLogin = async () => {
+    setLoading(true)
+    setError(null)
+    const result = await loginWithEmail(email, password)
+    if (result.success) {
+      navigate('/dashboard')
+    } else {
+      setError(result.message)
+      setLoading(false)
+    }
+  }
+
+  const inputClass = 'flex h-10 w-full rounded-md border px-3 py-2 text-sm placeholder:text-gs-gray focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gs-blue'
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid #acd4f1' }}>
@@ -76,47 +89,49 @@ function LoginScreen({ onBack, onSignIn }) {
         <p className="text-sm text-gs-gray mt-1">Sign in and see your investments</p>
       </div>
       <div className="flex flex-col gap-4">
-        <div>
-          <label className="text-xs font-semibold text-gs-navy block mb-2">Who are you?</label>
-          <div className="flex gap-3">
-            {LOGIN_USERS.map((u) => {
-              const selected = selectedUserId === u.user_id
-              return (
-                <button
-                  key={u.user_id}
-                  onClick={() => setSelectedUserId(u.user_id)}
-                  className="flex-1 py-3 rounded-xl text-sm font-medium transition-all"
-                  style={{
-                    background: selected ? '#001E62' : '#f4f8fd',
-                    border:     `1px solid ${selected ? '#001E62' : '#acd4f1'}`,
-                    color:      selected ? '#fff'    : '#001E62',
-                  }}
-                >
-                  {u.name}
-                </button>
-              )
-            })}
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-gs-navy">Email</label>
+          <input
+            type="email"
+            placeholder="your@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            className={inputClass}
+            style={{ borderColor: '#acd4f1' }}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-semibold text-gs-navy">Password</label>
           <input
             type="password"
-            placeholder="••••••••"
+            placeholder="Your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && onSignIn(selectedUserId)}
-            className="flex h-10 w-full rounded-md border px-3 py-2 text-sm
-                       placeholder:text-gs-gray focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gs-blue"
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            className={inputClass}
             style={{ borderColor: '#acd4f1' }}
           />
         </div>
         <button
-          onClick={() => onSignIn(selectedUserId)}
-          className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gs-navy hover:bg-gs-deep transition-colors mt-2"
+          onClick={handleLogin}
+          disabled={loading}
+          className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-colors mt-2"
+          style={{ backgroundColor: '#001E62', opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}
         >
-          Sign in →
+          {loading ? 'Logging in...' : 'Log in'}
         </button>
+        {error && (
+          <p className="text-xs text-center" style={{ color: '#dc2626' }}>
+            Wrong email or password — try again
+          </p>
+        )}
+        <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.9, marginTop: 4 }}>
+          <p className="font-medium" style={{ color: '#6b7280', marginBottom: 2 }}>Demo accounts:</p>
+          <p>pralay@test.com / pralay123</p>
+          <p>krishna@test.com / krishna123</p>
+          <p>alex@test.com / alex123</p>
+        </div>
       </div>
     </div>
   )
@@ -434,7 +449,7 @@ function StepHowItWorks({ onBack, onFinish }) {
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const { completeOnboarding, login } = useApp()
+  const { completeOnboarding } = useApp()
   const [view, setView]   = useState('landing')  // 'landing' | 'signup' | 'login'
   const [step, setStep]   = useState(0)
   const [formData, setFormData] = useState({
@@ -447,23 +462,20 @@ export default function Onboarding() {
   const next   = () => setStep((s) => s + 1)
   const back   = () => setStep((s) => s - 1)
 
-  const handleFinish = () => {
-    completeOnboarding({
+  const handleFinish = async () => {
+    await completeOnboarding({
       name:          formData.name,
+      email:         formData.email,
+      password:      formData.password,
       occupation:    formData.occupation,
-      age:           formData.age,
-      income:        formData.income,
-      investAmount:  formData.monthlyInvest,
+      age:           Number(formData.age),
+      income:        Number(formData.income),
+      investAmount:  Number(formData.monthlyInvest),
       style:         formData.style,
       goal:          formData.goal,
-      years:         formData.years,
+      years:         Number(formData.years),
       panicBehavior: '',
     })
-    navigate('/dashboard')
-  }
-
-  const handleSignIn = (userId) => {
-    login(userId)
     navigate('/dashboard')
   }
 
@@ -480,7 +492,6 @@ export default function Onboarding() {
         {view === 'login' && (
           <LoginScreen
             onBack={() => setView('landing')}
-            onSignIn={handleSignIn}
           />
         )}
 

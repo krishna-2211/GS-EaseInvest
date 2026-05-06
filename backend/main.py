@@ -2,15 +2,20 @@
 
 import json
 import os
+import uuid
 
 import anthropic
+import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from auth import create_access_token, get_current_user, hash_password, verify_password
+from database import SessionLocal, User, Base, engine, create_tables
 from mock_data import USERS
 from prompts import SYSTEM_PROMPT, build_user_context
+from seed import seed_users
 
 load_dotenv()
 
@@ -23,6 +28,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    create_tables()
+    Base.metadata.create_all(bind=engine)
+    seed_users()
+
 
 
 def calculate_portfolio(user: dict) -> dict:
@@ -285,3 +297,99 @@ def rebalance(request: RebalanceRequest):
             status_code=500,
             detail={"error": True, "message": "Something went wrong. Please try again."},
         )
+
+
+# ── Auth helpers ─────────────────────────────────────────────────────────────
+
+def _user_response(db_user: User, token: str) -> dict:
+    return {
+        "access_token": token,
+        "user": {
+            "user_id": db_user.user_id,
+            "name":    db_user.name,
+            "style":   db_user.style,
+            "goal":    db_user.goal,
+        },
+    }
+
+
+# ── Auth endpoints ────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    name:     str
+    email:    str
+    password: str
+    style:    str
+    goal:     str
+
+
+class LoginRequest(BaseModel):
+    email:    str
+    password: str
+
+
+@app.post("/auth/register")
+def register(request: RegisterRequest):
+    db = SessionLocal()
+    try:
+        if db.query(User).filter(User.email == request.email).first():
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        user_id = "user_" + str(uuid.uuid4())[:8]
+        user = User(
+            user_id=user_id,
+            name=request.name,
+            email=request.email,
+            hashed_password=hash_password(request.password),
+            style=request.style,
+            goal=request.goal,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return _user_response(user, create_access_token(user_id))
+    finally:
+        db.close()
+
+
+@app.post("/auth/login")
+def login(request: LoginRequest):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == request.email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="No account found with that email")
+        if not verify_password(request.password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="Incorrect password")
+        return _user_response(user, create_access_token(user.user_id))
+    finally:
+        db.close()
+
+
+@app.get("/auth/me")
+def me(user_id: str = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {"user_id": user.user_id, "name": user.name, "email": user.email, "style": user.style, "goal": user.goal}
+    finally:
+        db.close()
+
+
+# ── Market data ───────────────────────────────────────────────────────────────
+
+@app.get("/stock-price/{ticker}")
+async def get_stock_price(ticker: str):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+    params = {"interval": "1d", "range": "1d"}
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, params=params, headers=headers, timeout=5)
+            data = r.json()
+            price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
+            return {"ticker": ticker, "price": round(price, 2)}
+    except Exception:
+        return {"ticker": ticker, "price": None}

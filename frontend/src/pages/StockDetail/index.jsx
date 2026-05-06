@@ -2,6 +2,8 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { formatCurrency, formatPct } from '../../utils/format'
+import { getLivePrice } from '../../api/stockPrice'
+import { TICKER_MAP } from '../../utils/tickers'
 
 const LOGO_MAP = {
   'Apple':                          'apple.com',
@@ -94,10 +96,18 @@ export default function StockDetail() {
 
   const [activePeriod, setActivePeriod] = useState('1M')
   const [openTooltip, setOpenTooltip] = useState(null)
+  const [livePrice, setLivePrice] = useState(null)
 
   useEffect(() => {
     if (!holding) navigate('/dashboard', { replace: true })
   }, [holding, navigate])
+
+  useEffect(() => {
+    if (!holding) return
+    const ticker = TICKER_MAP[holding.name]
+    if (!ticker) return
+    getLivePrice(ticker).then(price => setLivePrice(price)).catch(() => {})
+  }, [holding?.name])
 
   const allPriceData = useMemo(() => {
     if (!holding) return {}
@@ -229,6 +239,20 @@ export default function StockDetail() {
         >
           {positive ? '+' : ''}{formatCurrency(gainLoss)} · {positive ? '+' : ''}{returnPct.toFixed(1)}%
         </span>
+        {livePrice != null && (
+          <div className="flex items-center gap-2 mt-2">
+            <span
+              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full"
+              style={{ backgroundColor: '#e8f5ee', color: '#16a34a' }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: '#4ade80' }} />
+              Live
+            </span>
+            <span className="text-sm" style={{ color: '#666666' }}>
+              Current market price: {formatCurrency(livePrice)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Period selector */}

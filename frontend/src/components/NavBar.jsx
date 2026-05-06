@@ -7,7 +7,7 @@ export default function NavBar() {
 
   const handleLogout = () => {
     logout()
-    navigate('/')
+    navigate('/onboarding')
   }
 
   const displayName  = activeUser?.name

@@ -9,6 +9,8 @@ import GrowthCalculator from '../../components/GrowthCalculator'
 import { NumberTicker } from '../../components/ui/number-ticker'
 import { Badge } from '../../components/ui/badge'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { getLivePrices } from '../../api/stockPrice'
+import { TICKER_MAP, BASE_PRICES } from '../../utils/tickers'
 
 const LOGO_MAP = {
   'Apple':                          'apple.com',
@@ -31,6 +33,45 @@ const ONBOARDED_SCORE = {
     'Starting with just $100 a month is enough to build real wealth over time.',
     'The earlier you start, the more time your money has to grow.',
   ],
+}
+
+const round2 = (n) => Math.round(n * 100) / 100
+
+function enrichWithLivePrices(portfolio, prices) {
+  const enrich = (h) => {
+    const ticker = TICKER_MAP[h.name]
+    const livePrice = ticker ? prices[ticker] : null
+    if (livePrice == null) return h
+    const basePrice = BASE_PRICES[ticker]
+    if (!basePrice) return h
+    const newCurrent = livePrice * (h.invested / basePrice)
+    return {
+      ...h,
+      current: round2(newCurrent),
+      return_pct: round2((newCurrent - h.invested) / h.invested * 100),
+    }
+  }
+
+  const newStocks = (portfolio.stocks ?? []).map(enrich)
+  const newFunds  = (portfolio.mutual_funds ?? []).map(enrich)
+  const allHoldings = [...newStocks, ...newFunds]
+  if (allHoldings.length === 0) return portfolio
+
+  const newCurrentValue = allHoldings.reduce((s, h) => s + h.current, 0)
+  const stocksTotal = newStocks.reduce((s, h) => s + h.current, 0)
+  const fundsTotal  = newFunds.reduce((s, h) => s + h.current, 0)
+
+  return {
+    ...portfolio,
+    stocks: newStocks,
+    mutual_funds: newFunds,
+    current_value: round2(newCurrentValue),
+    total_return_pct: round2((newCurrentValue - portfolio.total_invested) / portfolio.total_invested * 100),
+    allocation: {
+      stocks_pct: round2(stocksTotal / newCurrentValue * 100),
+      mutual_funds_pct: round2(fundsTotal / newCurrentValue * 100),
+    },
+  }
 }
 
 function Spinner() {
@@ -120,7 +161,7 @@ function HealthScoreCard({ score, name }) {
   )
 }
 
-function StatCard({ label, value, hero, valueColor, children }) {
+function StatCard({ label, value, hero, valueColor, shimmer, children }) {
   return (
     <div
       className="rounded-xl p-4 flex flex-col gap-1.5"
@@ -134,7 +175,7 @@ function StatCard({ label, value, hero, valueColor, children }) {
         {label}
       </p>
       <p
-        className="text-lg font-bold tabular-nums leading-tight"
+        className={`text-lg font-bold tabular-nums leading-tight${shimmer ? ' animate-pulse' : ''}`}
         style={{ color: valueColor ?? (hero ? '#ffffff' : '#001E62') }}
       >
         {value}
@@ -144,7 +185,7 @@ function StatCard({ label, value, hero, valueColor, children }) {
   )
 }
 
-function PortfolioStatsGrid({ portfolio }) {
+function PortfolioStatsGrid({ portfolio, livePricesLoaded, livePricesFetching }) {
   const totalReturn = (portfolio.current_value ?? 0) - (portfolio.total_invested ?? 0)
   const returnPositive = totalReturn >= 0
   const pctPositive = (portfolio.total_return_pct ?? 0) >= 0
@@ -160,7 +201,15 @@ function PortfolioStatsGrid({ portfolio }) {
           label="Current value"
           value={formatCurrency(portfolio.current_value)}
           hero
-        />
+          shimmer={livePricesFetching}
+        >
+          {livePricesLoaded && (
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#4ade80' }} />
+              <span className="text-[10px] font-semibold" style={{ color: '#4ade80' }}>Live</span>
+            </div>
+          )}
+        </StatCard>
         <StatCard
           label="Total return"
           value={`${returnPositive ? '+' : ''}${formatCurrency(totalReturn)}`}
@@ -490,6 +539,23 @@ function FirstStepGuide({ onboardingData }) {
   )
 }
 
+function EmptyPortfolioCard({ name }) {
+  const firstName = name?.split(' ')[0] ?? 'there'
+  return (
+    <div
+      className="rounded-2xl p-6 flex flex-col gap-3 text-center"
+      style={{ backgroundColor: '#f4f8fd', border: '1px solid #acd4f1' }}
+    >
+      <p className="text-3xl">📊</p>
+      <p className="font-semibold text-gs-navy">No investments yet, {firstName}!</p>
+      <p className="text-sm leading-relaxed" style={{ color: '#666666' }}>
+        Your portfolio will appear here once you make your first investment.
+        Start small — even $50 a month adds up over time.
+      </p>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { currentUser, activeUser, onboardedUserActive, onboardingData } = useApp()
   const navigate = useNavigate()
@@ -497,27 +563,67 @@ export default function Dashboard() {
   const [healthScore, setHealthScore] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [livePricesLoaded, setLivePricesLoaded] = useState(false)
+  const [livePricesFetching, setLivePricesFetching] = useState(false)
 
   useEffect(() => {
     if (onboardedUserActive) {
       setPortfolio(null)
       setHealthScore(null)
+      setLivePricesLoaded(false)
+      setLivePricesFetching(false)
       setLoading(false)
       return
     }
     if (!currentUser?.user_id) return
     setLoading(true)
     setError(null)
-    Promise.all([
-      getPortfolio(currentUser.user_id),
-      getHealthScore(currentUser.user_id),
-    ])
-      .then(([pRes, hRes]) => {
-        setPortfolio(pRes.data)
-        setHealthScore(hRes.data)
-      })
-      .catch(() => setError('Could not load data. Is the backend running?'))
-      .finally(() => setLoading(false))
+    setLivePricesLoaded(false)
+    setLivePricesFetching(false)
+
+    ;(async () => {
+      let pData = null
+
+      try {
+        const portfolioRes = await getPortfolio(currentUser.user_id)
+        pData = portfolioRes.data
+        setPortfolio(pData)
+      } catch (err) {
+        if (err.response?.status === 404) {
+          setPortfolio(null)
+        } else {
+          setError('Could not load data. Is the backend running?')
+        }
+      }
+
+      try {
+        const scoreRes = await getHealthScore(currentUser.user_id)
+        setHealthScore(scoreRes.data)
+      } catch (err) {
+        if (err.response?.status === 404) {
+          setHealthScore(null)
+        }
+      }
+
+      setLoading(false)
+
+      if (!pData) return
+      const tickers = [...new Set(
+        [...(pData.stocks ?? []), ...(pData.mutual_funds ?? [])]
+          .map(h => TICKER_MAP[h.name])
+          .filter(Boolean)
+      )]
+      if (tickers.length === 0) return
+      setLivePricesFetching(true)
+      getLivePrices(tickers)
+        .then(prices => {
+          const anyLoaded = tickers.some(t => prices[t] != null)
+          if (anyLoaded) setPortfolio(enrichWithLivePrices(pData, prices))
+          setLivePricesLoaded(anyLoaded)
+        })
+        .catch(() => {})
+        .finally(() => setLivePricesFetching(false))
+    })()
   }, [currentUser, onboardedUserActive])
 
   if (loading) return <Spinner />
@@ -545,12 +651,22 @@ export default function Dashboard() {
       {onboardedUserActive ? (
         <HealthScoreCard score={ONBOARDED_SCORE} name={onboardingData?.name} />
       ) : (
-        healthScore && <HealthScoreCard score={healthScore} name={currentUser?.name} />
+        <HealthScoreCard score={healthScore ?? ONBOARDED_SCORE} name={currentUser?.name} />
       )}
 
       {onboardedUserActive && <FirstStepGuide onboardingData={onboardingData} />}
 
-      {portfolio && <PortfolioStatsGrid portfolio={portfolio} />}
+      {!onboardedUserActive && !portfolio && (
+        <EmptyPortfolioCard name={currentUser?.name} />
+      )}
+
+      {portfolio && (
+        <PortfolioStatsGrid
+          portfolio={portfolio}
+          livePricesLoaded={livePricesLoaded}
+          livePricesFetching={livePricesFetching}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-3 pt-2">
         <Link
