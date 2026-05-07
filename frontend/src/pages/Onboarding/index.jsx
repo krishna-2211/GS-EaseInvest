@@ -23,32 +23,192 @@ const FEATURES = [
 
 // ─── Landing screen ──────────────────────────────────────────────────────────
 
-function LandingScreen({ onNew, onExisting }) {
+const LANDING_FEATURES = [
+  'Plain English — no confusing financial terms',
+  'AI advisor that knows your goals personally',
+  'Calm alerts when markets move, never panic mode',
+]
+
+const STAT_PILLS = ['🤖 4 AI Agents', '📈 Live stock prices', '🔒 JWT secured']
+
+function CheckCircle() {
   return (
-    <div>
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gs-navy">Welcome to GS-EaseInvest</h1>
-        <p className="text-sm text-gs-gray mt-2">Your calm, friendly guide to growing your money</p>
-      </div>
-      <div className="flex gap-4">
-        <button
-          onClick={onNew}
-          className="flex-1 bg-white rounded-xl p-5 text-left transition-all hover:border-gs-blue"
-          style={{ border: '1px solid #acd4f1' }}
-        >
-          <p className="font-semibold text-gs-navy text-sm">I'm new here</p>
-          <p className="text-xs text-gs-gray mt-1.5 leading-relaxed">Set up my profile and get started</p>
-        </button>
-        <button
-          onClick={onExisting}
-          className="flex-1 bg-white rounded-xl p-5 text-left transition-all hover:border-gs-blue"
-          style={{ border: '1px solid #acd4f1' }}
-        >
-          <p className="font-semibold text-gs-navy text-sm">I already have an account</p>
-          <p className="text-xs text-gs-gray mt-1.5 leading-relaxed">Sign in and see my investments</p>
-        </button>
-      </div>
+    <div
+      className="flex items-center justify-center flex-shrink-0"
+      style={{ width: 28, height: 28, borderRadius: '50%', backgroundColor: '#6B96C3' }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
     </div>
+  )
+}
+
+function LandingScreen({ onNew, onExisting }) {
+  const [hoverNew,   setHoverNew]   = useState(false)
+  const [hoverLogin, setHoverLogin] = useState(false)
+
+  return (
+    <>
+      <style>{`
+        @keyframes gseiFromLeft {
+          from { transform: translateX(-20px); opacity: 0; }
+          to   { transform: translateX(0);     opacity: 1; }
+        }
+        @keyframes gseiFromRight {
+          from { transform: translateX(20px);  opacity: 0; }
+          to   { transform: translateX(0);     opacity: 1; }
+        }
+        .gsei-from-left  { animation: gseiFromLeft  0.6s ease both; }
+        .gsei-from-right { animation: gseiFromRight 0.6s ease 0.2s both; }
+      `}</style>
+
+      <div className="flex flex-col md:flex-row min-h-screen">
+
+        {/* ── LEFT ── */}
+        <div
+          className="gsei-from-left flex flex-col justify-center px-8 md:px-16 py-10 md:py-12 md:w-3/5"
+          style={{ backgroundColor: '#001E62', minHeight: '50vh' }}
+        >
+          <div style={{ maxWidth: 480 }}>
+            <p
+              className="mb-8 font-semibold tracking-widest uppercase"
+              style={{ color: '#acd4f1', fontSize: 11, letterSpacing: '0.12em' }}
+            >
+              GS-EaseInvest
+            </p>
+
+            <h1
+              className="font-semibold text-white"
+              style={{ fontSize: 'clamp(32px, 4vw, 48px)', lineHeight: 1.2 }}
+            >
+              Your money,<br />
+              finally making<br />
+              sense.
+            </h1>
+
+            <p
+              className="mt-4 leading-relaxed"
+              style={{ color: '#acd4f1', fontSize: 16, maxWidth: 380, lineHeight: 1.7 }}
+            >
+              Join thousands of first-time investors who manage their portfolio
+              without the jargon, panic, or confusion.
+            </p>
+
+            <div className="flex flex-col mt-10" style={{ gap: 20 }}>
+              {LANDING_FEATURES.map((text) => (
+                <div key={text} className="flex items-center" style={{ gap: 12 }}>
+                  <CheckCircle />
+                  <span className="text-white" style={{ fontSize: 14 }}>{text}</span>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-10" style={{ color: '#7399c6', fontSize: 12 }}>
+              Powered by Anthropic Claude AI
+            </p>
+          </div>
+        </div>
+
+        {/* ── RIGHT ── */}
+        <div
+          className="gsei-from-right flex flex-col justify-center px-6 md:px-12 py-8 md:py-12 md:w-2/5"
+          style={{ backgroundColor: '#f4f8fd', minHeight: '50vh' }}
+        >
+          <div style={{ maxWidth: 400 }}>
+            <h2 className="font-semibold" style={{ fontSize: 28, color: '#001E62' }}>
+              Get started
+            </h2>
+            <p style={{ fontSize: 14, color: '#666666', marginTop: 4, marginBottom: 32 }}>
+              Choose how you'd like to continue
+            </p>
+
+            <div className="flex flex-col" style={{ gap: 16 }}>
+
+              {/* Card 1: new user */}
+              <button
+                onClick={onNew}
+                onMouseEnter={() => setHoverNew(true)}
+                onMouseLeave={() => setHoverNew(false)}
+                className="w-full text-left rounded-2xl p-6 transition-all duration-200"
+                style={{
+                  backgroundColor: hoverNew ? '#001E62' : '#ffffff',
+                  border: '2px solid #001E62',
+                  cursor: 'pointer',
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div
+                    className="flex items-center justify-center"
+                    style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: '#e8f0fb', fontSize: 20 }}
+                  >
+                    🌱
+                  </div>
+                  <span style={{ fontSize: 18, color: hoverNew ? '#ffffff' : '#001E62' }}>→</span>
+                </div>
+                <p
+                  className="font-semibold mt-3"
+                  style={{ fontSize: 18, color: hoverNew ? '#ffffff' : '#001E62' }}
+                >
+                  I'm new here
+                </p>
+                <p
+                  className="mt-1"
+                  style={{ fontSize: 13, color: hoverNew ? '#acd4f1' : '#666666' }}
+                >
+                  Set up your profile and get a personalized starter plan in 4 simple steps
+                </p>
+              </button>
+
+              {/* Card 2: existing user */}
+              <button
+                onClick={onExisting}
+                onMouseEnter={() => setHoverLogin(true)}
+                onMouseLeave={() => setHoverLogin(false)}
+                className="w-full text-left rounded-2xl p-6 bg-white transition-all duration-200"
+                style={{ border: `1px solid ${hoverLogin ? '#6B96C3' : '#e8eff8'}`, cursor: 'pointer' }}
+              >
+                <div className="flex items-center justify-between">
+                  <div
+                    className="flex items-center justify-center"
+                    style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: '#f4f8fd', fontSize: 20 }}
+                  >
+                    🔑
+                  </div>
+                  <span style={{ fontSize: 18, color: '#001E62' }}>→</span>
+                </div>
+                <p className="font-semibold mt-3" style={{ fontSize: 18, color: '#001E62' }}>
+                  I already have an account
+                </p>
+                <p className="mt-1" style={{ fontSize: 13, color: '#666666' }}>
+                  Sign in and see your investments, health score and AI recommendations
+                </p>
+              </button>
+            </div>
+
+            {/* Stat pills */}
+            <div className="flex flex-wrap mt-10" style={{ gap: 12 }}>
+              {STAT_PILLS.map((label) => (
+                <span
+                  key={label}
+                  className="rounded-full"
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e8eff8',
+                    padding: '8px 16px',
+                    fontSize: 12,
+                    color: '#666666',
+                  }}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </>
   )
 }
 
@@ -479,20 +639,20 @@ export default function Onboarding() {
     navigate('/dashboard')
   }
 
+  if (view === 'landing') {
+    return (
+      <LandingScreen
+        onNew={() => setView('signup')}
+        onExisting={() => setView('login')}
+      />
+    )
+  }
+
   return (
     <div className="bg-gs-bg min-h-screen py-8 px-4">
       <div className="max-w-md mx-auto">
-        {view === 'landing' && (
-          <LandingScreen
-            onNew={() => setView('signup')}
-            onExisting={() => setView('login')}
-          />
-        )}
-
         {view === 'login' && (
-          <LoginScreen
-            onBack={() => setView('landing')}
-          />
+          <LoginScreen onBack={() => setView('landing')} />
         )}
 
         {view === 'signup' && (
