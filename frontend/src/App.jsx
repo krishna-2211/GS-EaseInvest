@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Outlet, NavLink, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Outlet, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { AppProvider, useApp } from './context/AppContext'
 import { isTokenValid } from './utils/token'
 import NavBar from './components/NavBar'
@@ -97,9 +97,11 @@ function OnboardingGuard({ children }) {
 }
 
 function Layout() {
+  const { pathname } = useLocation()
+  const isOnboarding = pathname === '/' || pathname === '/onboarding'
   return (
     <div className="min-h-screen bg-gs-bg pb-16">
-      <NavBar />
+      {!isOnboarding && <NavBar />}
       <Outlet />
       <BottomNav />
     </div>

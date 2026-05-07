@@ -130,11 +130,12 @@ function LandingScreen({ onNew, onExisting }) {
                 onClick={onNew}
                 onMouseEnter={() => setHoverNew(true)}
                 onMouseLeave={() => setHoverNew(false)}
-                className="w-full text-left rounded-2xl p-6 transition-all duration-200"
+                className="w-full text-left rounded-2xl p-6"
                 style={{
                   backgroundColor: hoverNew ? '#001E62' : '#ffffff',
                   border: '2px solid #001E62',
                   cursor: 'pointer',
+                  transition: 'background-color 0.2s ease, color 0.2s ease',
                 }}
               >
                 <div className="flex items-center justify-between">

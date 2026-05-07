@@ -649,9 +649,7 @@ export default function Dashboard() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
 
-      {!onboardedUserActive && portfolio?.market_alert && (
-        <DontPanicBanner message={portfolio.market_alert} />
-      )}
+      {!onboardedUserActive && <DontPanicBanner />}
 
       {!onboardedUserActive && currentUser?.user_id && (
         <MonitorAlert userId={currentUser.user_id} />

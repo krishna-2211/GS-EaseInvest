@@ -649,6 +649,97 @@ def onboarding_suggest(req: OnboardingSuggestRequest):
         )
 
 
+# ── Market summary ────────────────────────────────────────────────────────────
+
+_INDICES = [
+    {"ticker": "^GSPC", "name": "S&P 500"},
+    {"ticker": "^IXIC", "name": "Nasdaq"},
+    {"ticker": "^DJI",  "name": "Dow Jones"},
+]
+
+_MARKET_FALLBACK = {"has_alert": False, "indices": [], "summary": None}
+
+
+async def _fetch_index(ticker: str, name: str) -> dict | None:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+    print(f"Fetching {ticker}...")
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                url,
+                params={"interval": "1d", "range": "2d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=8,
+            )
+        data   = r.json()
+        result = data["chart"]["result"][0]
+        meta   = result["meta"]
+
+        current_price = meta.get("regularMarketPrice")
+
+        previous_close = (
+            meta.get("previousClose") or
+            meta.get("chartPreviousClose") or
+            meta.get("regularMarketPreviousClose")
+        )
+
+        if not previous_close:
+            try:
+                closes = result["indicators"]["quote"][0]["close"]
+                valid  = [c for c in closes if c is not None]
+                if len(valid) >= 2:
+                    previous_close = valid[-2]
+            except Exception:
+                pass
+
+        print(f"{name}: current={current_price}, prev={previous_close}")
+
+        if current_price and previous_close:
+            change_pct = ((current_price - previous_close) / previous_close) * 100
+            return {
+                "name":       name,
+                "change_pct": round(change_pct, 1),
+                "direction":  "up" if change_pct > 0 else "down",
+            }
+        return None
+    except Exception as e:
+        print(f"Result: None (error: {e})")
+        return None
+
+
+@app.get("/market/summary")
+async def market_summary():
+    results = await asyncio.gather(
+        *[_fetch_index(idx["ticker"], idx["name"]) for idx in _INDICES],
+        return_exceptions=True,
+    )
+
+    indices = []
+    for raw in results:
+        if isinstance(raw, Exception) or raw is None:
+            continue
+        indices.append(raw)
+
+    if not indices:
+        return _MARKET_FALLBACK
+
+    parts = [
+        f"{i['name']} is {i['direction']} {abs(round(i['change_pct'], 1)):.1f}%"
+        for i in indices
+    ]
+    if len(parts) > 1:
+        summary = ", ".join(parts[:-1]) + ", and " + parts[-1] + " today."
+    else:
+        summary = parts[0] + " today."
+
+    return {
+        "indices":             indices,
+        "has_alert":           True,
+        "summary":             summary,
+        "alert_threshold_pct": 0,
+    }
+
+
 # ── Auth helpers ─────────────────────────────────────────────────────────────
 
 def _user_response(db_user: User, token: str) -> dict:
