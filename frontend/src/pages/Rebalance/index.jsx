@@ -66,6 +66,46 @@ function ThinkingBubble() {
   )
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function sanitizeReply(reply) {
+  if (typeof reply !== 'string') return String(reply ?? '')
+  const trimmed = reply.trim()
+  if (!trimmed.startsWith('{')) return trimmed
+  try {
+    const parsed = JSON.parse(trimmed)
+    return (
+      parsed.reply     ||
+      parsed.message   ||
+      parsed.content   ||
+      parsed.text      ||
+      parsed.answer    ||
+      parsed.situation ||
+      "Here's my take on your portfolio."
+    )
+  } catch {
+    return trimmed
+  }
+}
+
+function safeContent(content) {
+  if (typeof content !== 'string') return String(content ?? '')
+  const trimmed = content.trim()
+  if (!trimmed.startsWith('{')) return trimmed
+  try {
+    const parsed = JSON.parse(trimmed)
+    return (
+      parsed.reply     ||
+      parsed.message   ||
+      parsed.content   ||
+      parsed.text      ||
+      "Here's my take on your portfolio."
+    )
+  } catch {
+    return trimmed
+  }
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Rebalance() {
@@ -97,7 +137,7 @@ export default function Rebalance() {
       const response = await sendMessage(currentUser.user_id, apiMessages)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response.reply,
+        content: sanitizeReply(response.reply),
         recommendation: response.has_recommendation ? response.recommendation : null,
       }])
     } catch {
@@ -176,7 +216,7 @@ export default function Rebalance() {
                       : { backgroundColor: '#ffffff', border: '1px solid #e8eff8', color: '#001E62' }
                   }
                 >
-                  {msg.content}
+                  {safeContent(msg.content)}
                 </div>
                 {msg.role === 'assistant' && msg.recommendation && (
                   <ChatRecommendation rec={msg.recommendation} />

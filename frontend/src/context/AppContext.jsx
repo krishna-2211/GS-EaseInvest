@@ -26,6 +26,7 @@ export function AppProvider({ children }) {
         .then((user) => {
           setCurrentUser(user)
           setIsAuthenticated(true)
+          setOnboardedUserActive(false)
         })
         .catch(() => {
           removeToken()
@@ -77,6 +78,7 @@ export function AppProvider({ children }) {
       saveToken(response.access_token)
       setCurrentUser(response.user)
       setIsAuthenticated(true)
+      setOnboardedUserActive(false)
       return { success: true }
     } catch (err) {
       return {

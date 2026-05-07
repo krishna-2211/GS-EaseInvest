@@ -633,6 +633,8 @@ export default function Dashboard() {
 
   if (loading) return <Spinner />
 
+  const hasInvestments = !onboardedUserActive && portfolio != null && (portfolio.total_invested ?? 0) > 0
+
   if (error) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
@@ -680,11 +682,11 @@ export default function Dashboard() {
           )
       )}
 
-      {!onboardedUserActive && !portfolio && (
+      {!onboardedUserActive && !hasInvestments && (
         <EmptyPortfolioCard name={currentUser?.name} />
       )}
 
-      {portfolio && (
+      {hasInvestments && (
         <PortfolioStatsGrid
           portfolio={portfolio}
           livePricesLoaded={livePricesLoaded}
@@ -709,21 +711,25 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {portfolio?.allocation && (
+      {hasInvestments && portfolio.allocation && (
         <AllocationBar allocation={portfolio.allocation} />
       )}
 
-      <HoldingsList
-        stocks={portfolio?.stocks ?? []}
-        mutualFunds={portfolio?.mutual_funds ?? []}
-        navigate={navigate}
-        portfolioCurrentValue={portfolio?.current_value}
-      />
+      {hasInvestments && (
+        <HoldingsList
+          stocks={portfolio.stocks ?? []}
+          mutualFunds={portfolio.mutual_funds ?? []}
+          navigate={navigate}
+          portfolioCurrentValue={portfolio.current_value}
+        />
+      )}
 
-      <AllocationPieChart
-        stocks={portfolio?.stocks}
-        mutualFunds={portfolio?.mutual_funds}
-      />
+      {hasInvestments && (
+        <AllocationPieChart
+          stocks={portfolio.stocks}
+          mutualFunds={portfolio.mutual_funds}
+        />
+      )}
 
       <div>
         <p className="text-[10px] font-semibold text-gs-gray uppercase tracking-widest mb-3">
