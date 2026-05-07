@@ -1,5 +1,6 @@
 # Run with: uvicorn main:app --reload
 
+import asyncio
 import json
 import os
 import uuid
@@ -396,3 +397,440 @@ async def get_stock_price(ticker: str):
             return {"ticker": ticker, "price": round(price, 2)}
     except Exception:
         return {"ticker": ticker, "price": None}
+
+
+# ── Shared Yahoo Finance price helper ─────────────────────────────────────────
+
+async def _fetch_price(ticker: str) -> float | None:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                url,
+                params={"interval": "1d", "range": "1d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=5,
+            )
+        return r.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    except Exception:
+        return None
+
+
+async def _enrich_with_prices(items: list[dict]) -> list[dict]:
+    prices = await asyncio.gather(
+        *[_fetch_price(item["ticker"]) for item in items],
+        return_exceptions=True,
+    )
+    result = []
+    for item, price in zip(items, prices):
+        live = None if isinstance(price, Exception) else price
+        result.append({
+            **item,
+            "price":           round(live, 2) if live is not None else None,
+            "price_available": live is not None,
+        })
+    return result
+
+
+# ── Rebalance chat ────────────────────────────────────────────────────────────
+
+class ChatMessage(BaseModel):
+    role:    str
+    content: str
+
+class ChatRequest(BaseModel):
+    user_id:  str
+    messages: list[ChatMessage]
+
+_CHAT_FALLBACK = {
+    "reply": "Sorry, I couldn't generate advice right now. Please try again.",
+    "has_recommendation": False,
+    "recommendation": None,
+}
+
+@app.post("/rebalance/chat")
+def rebalance_chat(request: ChatRequest):
+    user = USERS.get(request.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
+
+    portfolio = calculate_portfolio(user)
+    context = build_user_context(user, portfolio, "")
+
+    system = (
+        f"{SYSTEM_PROMPT}\n\n"
+        f"User context:\n{context}\n\n"
+        "Reply conversationally in plain English. "
+        "If you have a specific rebalancing recommendation, include a JSON block at the end:\n"
+        '```json\n{"situation":"...","action":"...","confidence_pct":75}\n```'
+    )
+
+    api_messages = [{"role": m.role, "content": m.content} for m in request.messages]
+
+    try:
+        client   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=800,
+            system=system,
+            messages=api_messages,
+        )
+        raw = response.content[0].text.strip()
+
+        recommendation = None
+        reply          = raw
+        if "```json" in raw:
+            parts = raw.split("```json")
+            reply = parts[0].strip()
+            try:
+                json_str   = parts[1].split("```")[0].strip()
+                recommendation = json.loads(json_str)
+            except Exception:
+                pass
+
+        return {
+            "reply":              reply,
+            "has_recommendation": recommendation is not None,
+            "recommendation":     recommendation,
+        }
+    except Exception:
+        return _CHAT_FALLBACK
+
+
+# ── Stocks & Funds catalogues ─────────────────────────────────────────────────
+
+_STOCKS = [
+    {"name": "Apple",              "ticker": "AAPL",  "sector": "Technology",  "risk": "Low-Medium",  "desc": "World's most valuable company, makes iPhone and Mac"},
+    {"name": "Microsoft",          "ticker": "MSFT",  "sector": "Technology",  "risk": "Low-Medium",  "desc": "Powers software and cloud services used by billions"},
+    {"name": "NVIDIA",             "ticker": "NVDA",  "sector": "Technology",  "risk": "Medium-High", "desc": "Leading chip maker behind AI and gaming"},
+    {"name": "Alphabet",           "ticker": "GOOGL", "sector": "Technology",  "risk": "Low-Medium",  "desc": "Parent company of Google and YouTube"},
+    {"name": "Amazon",             "ticker": "AMZN",  "sector": "Consumer",    "risk": "Medium",      "desc": "E-commerce and cloud computing giant"},
+    {"name": "Meta",               "ticker": "META",  "sector": "Technology",  "risk": "Medium",      "desc": "Owns Facebook, Instagram and WhatsApp"},
+    {"name": "Tesla",              "ticker": "TSLA",  "sector": "Automotive",  "risk": "High",        "desc": "Leading electric vehicle and energy company"},
+    {"name": "Berkshire Hathaway", "ticker": "BRK-B", "sector": "Finance",     "risk": "Low",         "desc": "Warren Buffett's diversified holding company"},
+    {"name": "Johnson & Johnson",  "ticker": "JNJ",   "sector": "Healthcare",  "risk": "Low",         "desc": "Healthcare giant with 130+ years of history"},
+    {"name": "JPMorgan Chase",     "ticker": "JPM",   "sector": "Finance",     "risk": "Low-Medium",  "desc": "America's largest bank by assets"},
+    {"name": "Visa",               "ticker": "V",     "sector": "Finance",     "risk": "Low-Medium",  "desc": "Global payments network used in 200+ countries"},
+    {"name": "Procter & Gamble",   "ticker": "PG",    "sector": "Consumer",    "risk": "Low",         "desc": "Makes everyday brands like Tide, Pampers, Gillette"},
+    {"name": "UnitedHealth",       "ticker": "UNH",   "sector": "Healthcare",  "risk": "Low-Medium",  "desc": "Largest health insurance company in the US"},
+    {"name": "Exxon Mobil",        "ticker": "XOM",   "sector": "Energy",      "risk": "Medium",      "desc": "One of the world's largest oil and gas companies"},
+    {"name": "Home Depot",         "ticker": "HD",    "sector": "Consumer",    "risk": "Low-Medium",  "desc": "Largest home improvement retailer in the US"},
+]
+
+_FUNDS = [
+    {"name": "Vanguard S&P 500 ETF",          "ticker": "VOO",   "type": "Index Fund",    "risk": "Low",         "desc": "Tracks 500 biggest US companies — most popular beginner fund"},
+    {"name": "Fidelity Growth Fund",           "ticker": "FGRIX", "type": "Growth",        "risk": "Medium",      "desc": "Focuses on companies expected to grow faster than average"},
+    {"name": "iShares Core US Aggregate Bond", "ticker": "AGG",   "type": "Bond",          "risk": "Low",         "desc": "Diversified bond fund for stability and income"},
+    {"name": "Vanguard Total Stock Market",    "ticker": "VTI",   "type": "Index Fund",    "risk": "Low",         "desc": "Owns a piece of every US publicly traded company"},
+    {"name": "Invesco QQQ Trust",              "ticker": "QQQ",   "type": "Tech Index",    "risk": "Medium-High", "desc": "Tracks the 100 largest Nasdaq companies, heavy on tech"},
+    {"name": "Vanguard Total Bond Market",     "ticker": "BND",   "type": "Bond",          "risk": "Low",         "desc": "Broad exposure to US investment grade bonds"},
+    {"name": "ARK Innovation ETF",             "ticker": "ARKK",  "type": "Active",        "risk": "High",        "desc": "Actively managed fund focused on disruptive innovation"},
+    {"name": "Vanguard Dividend Appreciation", "ticker": "VIG",   "type": "Dividend",      "risk": "Low-Medium",  "desc": "Companies with a history of growing their dividends"},
+    {"name": "iShares MSCI Emerging Markets",  "ticker": "EEM",   "type": "International", "risk": "High",        "desc": "Exposure to fast-growing economies like China, India, Brazil"},
+    {"name": "Schwab US Dividend Equity",      "ticker": "SCHD",  "type": "Dividend",      "risk": "Low-Medium",  "desc": "High quality US companies that pay reliable dividends"},
+    {"name": "Vanguard Real Estate ETF",       "ticker": "VNQ",   "type": "Real Estate",   "risk": "Medium",      "desc": "Invest in real estate without buying property"},
+    {"name": "SPDR Gold Shares",               "ticker": "GLD",   "type": "Commodity",     "risk": "Medium",      "desc": "Tracks the price of gold — a classic safe haven asset"},
+    {"name": "Fidelity Balanced Fund",         "ticker": "FBALX", "type": "Balanced",      "risk": "Low-Medium",  "desc": "Mix of stocks and bonds managed for steady growth"},
+    {"name": "Vanguard Growth ETF",            "ticker": "VUG",   "type": "Growth",        "risk": "Medium",      "desc": "Large US growth companies like Apple, Microsoft, Amazon"},
+    {"name": "iShares Core S&P Mid-Cap",       "ticker": "IJH",   "type": "Index Fund",    "risk": "Medium",      "desc": "Mid-sized US companies with strong growth potential"},
+]
+
+
+@app.get("/stocks/list")
+async def list_stocks():
+    return await _enrich_with_prices(_STOCKS)
+
+
+@app.get("/funds/list")
+async def list_funds():
+    return await _enrich_with_prices(_FUNDS)
+
+
+# ── Simulate ──────────────────────────────────────────────────────────────────
+
+class SimulateRequest(BaseModel):
+    user_id: str
+    ticker:  str
+    name:    str
+    amount:  float
+    type:    str  # "stock" or "fund"
+
+
+@app.post("/simulate")
+def simulate(request: SimulateRequest):
+    user = USERS.get(request.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": True, "message": "We couldn't find that account."})
+
+    portfolio      = calculate_portfolio(user)
+    current_value  = portfolio["current_value"] or 0
+    stocks_value   = sum(h["current"] for h in portfolio["stocks"])
+    funds_value    = sum(h["current"] for h in portfolio["mutual_funds"])
+
+    new_total = current_value + request.amount
+    if request.type == "stock":
+        new_stocks_value = stocks_value + request.amount
+        new_funds_value  = funds_value
+    else:
+        new_stocks_value = stocks_value
+        new_funds_value  = funds_value + request.amount
+
+    new_stocks_pct    = round(new_stocks_value / new_total * 100, 1) if new_total else 0
+    new_funds_pct     = round(100 - new_stocks_pct, 1)
+    before_stocks_pct = round(stocks_value / current_value * 100, 1) if current_value else 0
+    before_funds_pct  = round(100 - before_stocks_pct, 1)
+
+    prompt = (
+        f"User {user['name']} has a portfolio worth ${current_value}. "
+        f"Goal: {user['goal']}, Style: {user['risk_style']}, Timeline: {user['goal_years']} years. "
+        f"They want to add ${int(request.amount)} of {request.name} ({request.ticker}). "
+        f"Current allocation: {before_stocks_pct}% stocks, {before_funds_pct}% funds. "
+        f"New allocation would be: {new_stocks_pct}% stocks, {new_funds_pct}% funds.\n\n"
+        f"In 2-3 sentences, tell them whether this is a good fit and one thing to watch out for. "
+        f"Plain English, no jargon.\n\n"
+        f'Reply with JSON only: {{"ai_insight":"...","good_fit":true or false}}'
+    )
+
+    try:
+        client   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        parsed     = json.loads(response.content[0].text.strip())
+        ai_insight = parsed.get("ai_insight", "")
+        good_fit   = bool(parsed.get("good_fit", True))
+    except Exception:
+        ai_insight = (
+            f"Adding {request.name} would shift your allocation to "
+            f"{new_stocks_pct}% stocks — review whether that matches your {user['goal']} goal."
+        )
+        good_fit = True
+
+    return {
+        "ticker": request.ticker,
+        "name":   request.name,
+        "amount": request.amount,
+        "before": {"total_value": round(current_value, 2), "stocks_pct": before_stocks_pct, "funds_pct": before_funds_pct},
+        "after":  {"total_value": round(new_total, 2),     "stocks_pct": new_stocks_pct,    "funds_pct": new_funds_pct},
+        "ai_insight": ai_insight,
+        "good_fit":   good_fit,
+    }
+
+
+# ── Portfolio alerts ──────────────────────────────────────────────────────────
+
+_alerts: dict[str, dict] = {}  # user_id → alert payload
+
+_TICKER_MAP = {
+    "Apple":                "AAPL",
+    "Tesla":                "TSLA",
+    "NVIDIA":               "NVDA",
+    "Microsoft":            "MSFT",
+    "Johnson & Johnson":    "JNJ",
+    "Vanguard S&P 500 ETF": "VOO",
+    "Fidelity Growth Fund": "FGRIX",
+}
+
+_BASE_PRICES = {
+    "AAPL":  190, "TSLA": 245, "NVDA": 875,
+    "MSFT":  415, "JNJ":  155, "VOO":  495, "FGRIX": 24,
+}
+
+
+async def monitor_portfolios():
+    claude = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    for user_id, user in USERS.items():
+        for holding in user["portfolio"]["stocks"] + user["portfolio"]["mutual_funds"]:
+            ticker     = _TICKER_MAP.get(holding["name"])
+            base_price = _BASE_PRICES.get(ticker) if ticker else None
+            if not ticker or not base_price:
+                continue
+            live_price = await _fetch_price(ticker)
+            if live_price is None:
+                continue
+            drop_pct = round((base_price - live_price) / base_price * 100, 1)
+            if drop_pct < 5:
+                continue
+            try:
+                response = claude.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=120,
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            f"{holding['name']} dropped {drop_pct}% from ${base_price} to ${live_price:.2f}. "
+                            f"User goal: {user['goal']}, style: {user['risk_style']}. "
+                            "In ONE calm sentence, tell them whether to hold or act — no jargon."
+                        ),
+                    }],
+                )
+                message = response.content[0].text.strip()
+            except Exception:
+                message = f"{holding['name']} has dropped {drop_pct}% — consider reviewing your position."
+
+            _alerts[user_id] = {
+                "has_alert": True,
+                "stock":     holding["name"],
+                "ticker":    ticker,
+                "drop_pct":  drop_pct,
+                "message":   message,
+            }
+            break  # one alert per user at a time
+
+
+@app.get("/alerts/{user_id}")
+async def get_alert(user_id: str):
+    return _alerts.get(user_id, {"has_alert": False})
+
+
+@app.post("/alerts/{user_id}/dismiss")
+async def dismiss_alert(user_id: str):
+    _alerts.pop(user_id, None)
+    return {"dismissed": True}
+
+
+@app.post("/alerts/run-now")
+async def run_monitor_now():
+    await monitor_portfolios()
+    return {"status": "done"}
+
+
+# ── Market summary ────────────────────────────────────────────────────────────
+
+_INDICES = [
+    {"ticker": "^GSPC", "name": "S&P 500"},
+    {"ticker": "^IXIC", "name": "Nasdaq"},
+    {"ticker": "^DJI",  "name": "Dow Jones"},
+]
+
+_MARKET_FALLBACK = {"has_alert": False, "indices": [], "summary": None}
+
+
+async def _fetch_index(ticker: str, name: str) -> dict | None:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+    print(f"Fetching {ticker}...")
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                url,
+                params={"interval": "1d", "range": "2d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=8,
+            )
+        data   = r.json()
+        result = data["chart"]["result"][0]
+        meta   = result["meta"]
+
+        current_price  = meta.get("regularMarketPrice")
+        previous_close = (
+            meta.get("previousClose") or
+            meta.get("chartPreviousClose") or
+            meta.get("regularMarketPreviousClose")
+        )
+
+        if not previous_close:
+            try:
+                closes = result["indicators"]["quote"][0]["close"]
+                valid  = [c for c in closes if c is not None]
+                if len(valid) >= 2:
+                    previous_close = valid[-2]
+            except Exception:
+                pass
+
+        print(f"{name}: current={current_price}, prev={previous_close}")
+
+        if current_price and previous_close:
+            change_pct = ((current_price - previous_close) / previous_close) * 100
+            return {
+                "name":       name,
+                "change_pct": round(change_pct, 1),
+                "direction":  "up" if change_pct > 0 else "down",
+            }
+        return None
+    except Exception as e:
+        print(f"Result: None (error: {e})")
+        return None
+
+
+@app.get("/market/summary")
+async def market_summary():
+    results = await asyncio.gather(
+        *[_fetch_index(idx["ticker"], idx["name"]) for idx in _INDICES],
+        return_exceptions=True,
+    )
+
+    indices = []
+    for raw in results:
+        if isinstance(raw, Exception) or raw is None:
+            continue
+        indices.append(raw)
+
+    if not indices:
+        return _MARKET_FALLBACK
+
+    parts = [
+        f"{i['name']} is {i['direction']} {abs(round(i['change_pct'], 1)):.1f}%"
+        for i in indices
+    ]
+    if len(parts) > 1:
+        summary = ", ".join(parts[:-1]) + ", and " + parts[-1] + " today."
+    else:
+        summary = parts[0] + " today."
+
+    return {
+        "indices":             indices,
+        "has_alert":           True,
+        "summary":             summary,
+        "alert_threshold_pct": 0,
+    }
+
+
+# ── Onboarding suggestion ─────────────────────────────────────────────────────
+
+class OnboardingSuggestRequest(BaseModel):
+    name:           str
+    occupation:     str
+    age:            int
+    income:         float
+    invest_amount:  float
+    style:          str
+    goal:           str
+    years:          int
+    panic_behavior: str
+
+
+@app.post("/onboarding/suggest")
+def onboarding_suggest(req: OnboardingSuggestRequest):
+    prompt = (
+        f"New investor profile:\n"
+        f"- Name: {req.name}, Age: {req.age}, Occupation: {req.occupation}\n"
+        f"- Monthly income: ${req.income}, Can invest: ${req.invest_amount}/month\n"
+        f"- Goal: {req.goal} in {req.years} years\n"
+        f"- Style: {req.style}\n"
+        f"- When markets drop they: {req.panic_behavior}\n\n"
+        f"Suggest a simple starter portfolio. BEGINNER — max 4 holdings.\n\n"
+        f"Respond in this exact JSON format:\n"
+        f'{{"greeting":"...","summary":"...","suggested_holdings":['
+        f'{{"name":"...","ticker":"...","type":"fund","allocation_pct":50,"monthly_amount":100,"reason":"..."}}],'
+        f'"first_tip":"...","encouragement":"..."}}\n\n'
+        f"Rules: max 4 holdings, allocation_pct sums to 100, monthly_amount sums to invest_amount, "
+        f"match style (Careful=more funds, YOLO=more stocks), match timeline (short=safer), "
+        f"only use tickers: AAPL MSFT GOOGL AMZN JNJ VOO VTI BND AGG SCHD. "
+        f"Return ONLY the JSON."
+    )
+
+    try:
+        client   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model      = "claude-sonnet-4-20250514",
+            max_tokens = 1024,
+            system     = "You are a calm, friendly financial advisor for first-time investors. Give beginner-friendly advice with zero jargon.",
+            messages   = [{"role": "user", "content": prompt}],
+        )
+        return json.loads(response.content[0].text.strip())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="We had trouble generating your suggestions. Please try again.")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Something went wrong reaching our advisor. Please try again.")
